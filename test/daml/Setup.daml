@@ -1,0 +1,48 @@
+module Setup where
+
+import DA.Foldable (forA_)
+import DA.Time
+import Daml.Script
+import Test.Fixture
+
+demoLimits : Limits
+demoLimits = Limits with
+  startingBalance = 1000.0
+  perTxCap = 200.0
+  dailyCap = 300.0
+  autoApproveThreshold = 50.0
+  -- Short enough that a window rolling over is visible during the demo.
+  windowLength = minutes 2
+
+data DemoParties = DemoParties
+  with
+    bank : Party
+    owner : Party
+    agent : Party
+    merchant : Party
+    stranger : Party
+    outsider : Party
+  deriving (Eq, Show)
+
+-- | A ledger user per party, named by role, so the frontend can act as each one.
+createDemoUsers : [(Text, Party)] -> Script ()
+createDemoUsers roles = forA_ roles \(name, party) -> do
+  userId <- validateUserId name
+  createUser (User userId (Some party)) [CanActAs party]
+
+-- | Run once against a fresh sandbox. Parties and users only: the frontend
+-- mints the holding and creates the policy.
+demoParties : Script DemoParties
+demoParties = do
+  [bank, owner, agent, merchant, stranger, outsider] <-
+    mapA allocateParty ["Bank", "Owner", "Agent", "Merchant", "Stranger", "Outsider"]
+  createDemoUsers [("bank", bank), ("owner", owner), ("agent", agent), ("merchant", merchant), ("stranger", stranger), ("outsider", outsider)]
+  pure DemoParties with ..
+
+-- | Run once against a fresh sandbox. Parties, users, the starting holding and
+-- the policy, for working from the command line without the frontend.
+demoSetup : Script World
+demoSetup = do
+  w <- setupWorldNamed "" demoLimits
+  createDemoUsers [("bank", w.bank), ("owner", w.owner), ("agent", w.agent), ("merchant", w.merchant), ("stranger", w.stranger), ("outsider", w.outsider)]
+  pure w

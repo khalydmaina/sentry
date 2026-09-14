@@ -1,0 +1,109 @@
+module Test.Fixture where
+
+import DA.Time
+import Daml.Script
+import Wallet.Holding
+import Wallet.Policy
+import Wallet.Records
+
+data World = World
+  with
+    bank : Party
+    owner : Party
+    agent : Party
+    merchant : Party -- allowlisted counterparty
+    stranger : Party -- not allowlisted
+    outsider : Party -- no role at all, used to show what an unrelated party sees
+    policy : ContractId WalletPolicy
+  deriving (Eq, Show)
+
+data Limits = Limits
+  with
+    startingBalance : Decimal
+    perTxCap : Decimal
+    dailyCap : Decimal
+    autoApproveThreshold : Decimal
+    windowLength : RelTime
+  deriving (Eq, Show)
+
+defaultLimits : Limits
+defaultLimits = Limits with
+  startingBalance = 1000.0
+  perTxCap = 200.0
+  dailyCap = 300.0
+  autoApproveThreshold = 50.0
+  windowLength = hours 24
+
+-- | Script runs derive party ids deterministically from the hint, so a second
+-- run against the same ledger collides. Suffixing hints with the number of
+-- parties already known keeps repeated test runs on one sandbox apart.
+withUniqueSuffix : Text -> Script Text
+withUniqueSuffix hint = (\known -> hint <> "-" <> show (length known)) <$> listKnownParties
+
+uniqueParty : Text -> Script Party
+uniqueParty hint = withUniqueSuffix hint >>= allocateParty
+
+setupWorld : Limits -> Script World
+setupWorld limits = withUniqueSuffix "" >>= \suffix -> setupWorldNamed suffix limits
+
+-- | Allocates the demo parties, has Bank mint the starting holding, and has the
+-- owner delegate to the agent.
+setupWorldNamed : Text -> Limits -> Script World
+setupWorldNamed suffix limits = do
+  [bank, owner, agent, merchant, stranger, outsider] <-
+    mapA (allocateParty . (<> suffix)) ["Bank", "Owner", "Agent", "Merchant", "Stranger", "Outsider"]
+  holding <- submit bank do
+    createCmd WalletHolding with
+      issuer = bank
+      owner
+      agent
+      amount = limits.startingBalance
+  policy <- submit owner do
+    createCmd WalletPolicy with
+      owner
+      agent
+      issuer = bank
+      holding
+      perTxCap = limits.perTxCap
+      dailyCap = limits.dailyCap
+      allowedCounterparties = [merchant]
+      autoApproveThreshold = limits.autoApproveThreshold
+      windowLength = limits.windowLength
+      recentSpends = []
+  pure World with ..
+
+-- | The one live policy between this owner and agent.
+currentPolicy : World -> Script (ContractId WalletPolicy, WalletPolicy)
+currentPolicy w = do
+  policies <- query @WalletPolicy w.owner
+  case filter (\(_, p) -> p.agent == w.agent) policies of
+    [p] -> pure p
+    ps -> abort ("expected exactly one live policy, found " <> show (length ps))
+
+-- | Submits a request as the agent against whatever policy is live right now.
+request : World -> Decimal -> Party -> Script Outcome
+request w amount counterparty = do
+  (cid, _) <- currentPolicy w
+  submit w.agent do
+    exerciseCmd cid RequestTransfer with
+      amount
+      counterparty
+      memo = "test"
+
+-- | Total of the holdings `p` owns, as seen by `p`.
+balanceOf : Party -> Script Decimal
+balanceOf p = do
+  holdings <- query @WalletHolding p
+  pure $ sum [h.amount | (_, h) <- holdings, h.owner == p]
+
+expectExecuted : Outcome -> Script SpendResult
+expectExecuted (Executed r) = pure r
+expectExecuted o = abort ("expected Executed, got " <> show o)
+
+expectEscalated : Outcome -> Script (ContractId PendingApproval)
+expectEscalated (Escalated cid) = pure cid
+expectEscalated o = abort ("expected Escalated, got " <> show o)
+
+expectRejected : Outcome -> Script (ContractId RejectedTransfer)
+expectRejected (Rejected cid) = pure cid
+expectRejected o = abort ("expected Rejected, got " <> show o)

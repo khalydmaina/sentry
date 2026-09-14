@@ -1,0 +1,320 @@
+module Test.Wallet where
+
+import DA.Assert
+import DA.Optional (isNone)
+import DA.Time
+import Daml.Script
+import Test.Fixture
+import Wallet.Holding
+import Wallet.Policy
+import Wallet.Records
+
+testRejectsNonPositiveAmounts : Script ()
+testRejectsNonPositiveAmounts = script do
+  w <- setupWorld defaultLimits
+  submitMustFail w.agent do
+    exerciseCmd w.policy RequestTransfer with amount = 0.0; counterparty = w.merchant; memo = "zero"
+  submitMustFail w.agent do
+    exerciseCmd w.policy RequestTransfer with amount = -500.0; counterparty = w.merchant; memo = "negative"
+  -- An unlisted counterparty takes the escalation path, which never reaches
+  -- Transfer's own qty check, so only RequestTransfer's check stops this one.
+  submitMustFail w.agent do
+    exerciseCmd w.policy RequestTransfer with amount = -500.0; counterparty = w.stranger; memo = "negative"
+  -- Malformed input aborts outright: no record of any kind is left behind.
+  executed <- query @ExecutedTransfer w.owner
+  rejected <- query @RejectedTransfer w.owner
+  pending <- query @PendingApproval w.owner
+  length executed === 0
+  length rejected === 0
+  length pending === 0
+  balanceOf w.owner >>= (=== 1000.0)
+
+testAutoApproveMovesFunds : Script ()
+testAutoApproveMovesFunds = script do
+  w <- setupWorld defaultLimits
+  result <- request w 40.0 w.merchant >>= expectExecuted
+  balanceOf w.owner >>= (=== 960.0)
+  balanceOf w.merchant >>= (=== 40.0)
+  -- The spend replaced the policy and was logged in its rolling window.
+  old <- queryContractId w.owner w.policy
+  assert (isNone old)
+  (cid, p) <- currentPolicy w
+  cid === result.newPolicy
+  map snd p.recentSpends === [40.0]
+  -- The counterparty sees the audit record for its own transfer.
+  Some record <- queryContractId w.merchant result.executed
+  record.via === AutoApproved
+  record.amount === 40.0
+
+testInsufficientBalanceAutoRejects : Script ()
+testInsufficientBalanceAutoRejects = script do
+  w <- setupWorld defaultLimits with startingBalance = 30.0
+  rejectedCid <- request w 40.0 w.merchant >>= expectRejected
+  Some rejected <- queryContractId w.owner rejectedCid
+  rejected.reasons === [reasonInsufficientBalance]
+  rejected.via === AutoRejected
+  -- No approval to chase, and the policy contract was never touched.
+  pending <- query @PendingApproval w.owner
+  length pending === 0
+  (cid, _) <- currentPolicy w
+  cid === w.policy
+
+testUnlistedCounterpartyEscalates : Script ()
+testUnlistedCounterpartyEscalates = script do
+  w <- setupWorld defaultLimits
+  pendingCid <- request w 10.0 w.stranger >>= expectEscalated
+  Some pending <- queryContractId w.owner pendingCid
+  pending.reasons === [reasonNotAllowlisted]
+  (cid, _) <- currentPolicy w
+  cid === w.policy
+  balanceOf w.owner >>= (=== 1000.0)
+
+testPerTxCapEscalates : Script ()
+testPerTxCapEscalates = script do
+  w <- setupWorld defaultLimits
+  pendingCid <- request w 250.0 w.merchant >>= expectEscalated
+  Some pending <- queryContractId w.owner pendingCid
+  pending.reasons === [reasonOverPerTxCap]
+
+testAboveThresholdEscalates : Script ()
+testAboveThresholdEscalates = script do
+  w <- setupWorld defaultLimits
+  pendingCid <- request w 100.0 w.merchant >>= expectEscalated
+  Some pending <- queryContractId w.owner pendingCid
+  pending.reasons === [reasonAboveThreshold]
+
+testDailyCapEscalates : Script ()
+testDailyCapEscalates = script do
+  w <- setupWorld defaultLimits with autoApproveThreshold = 200.0
+  request w 150.0 w.merchant >>= expectExecuted
+  request w 150.0 w.merchant >>= expectExecuted
+  pendingCid <- request w 10.0 w.merchant >>= expectEscalated
+  Some pending <- queryContractId w.owner pendingCid
+  pending.reasons === [reasonOverDailyCap]
+
+testFailedChecksAreCombined : Script ()
+testFailedChecksAreCombined = script do
+  w <- setupWorld defaultLimits
+  pendingCid <- request w 250.0 w.stranger >>= expectEscalated
+  Some pending <- queryContractId w.owner pendingCid
+  pending.reasons === [reasonNotAllowlisted, reasonOverPerTxCap]
+  pendings <- query @PendingApproval w.owner
+  length pendings === 1
+
+-- A fixed window starting at t=0 would reset at t=10 and allow another 100
+-- right after the 100 spent at t=9. The rolling window must not.
+testRollingWindowHasNoBoundaryDoubleSpend : Script ()
+testRollingWindowHasNoBoundaryDoubleSpend = script do
+  w <- setupWorld defaultLimits with
+    perTxCap = 50.0
+    dailyCap = 100.0
+    autoApproveThreshold = 50.0
+    windowLength = minutes 10
+  passTime (minutes 9)
+  request w 50.0 w.merchant >>= expectExecuted
+  request w 50.0 w.merchant >>= expectExecuted
+  passTime (minutes 2)
+  pendingCid <- request w 50.0 w.merchant >>= expectEscalated
+  Some pending <- queryContractId w.owner pendingCid
+  pending.reasons === [reasonOverDailyCap]
+  -- Once the t=9 spends are a full window old, the allowance comes back.
+  passTime (minutes 8)
+  request w 50.0 w.merchant >>= expectExecuted
+  (_, p) <- currentPolicy w
+  map snd p.recentSpends === [50.0]
+  balanceOf w.merchant >>= (=== 150.0)
+
+testOwnerTransferKeepsHoldingInSync : Script ()
+testOwnerTransferKeepsHoldingInSync = script do
+  w <- setupWorld defaultLimits
+  -- The owner can pay anyone, any amount, without escalation.
+  submit w.owner do
+    exerciseCmd w.policy OwnerTransfer with to = w.stranger; qty = 500.0; memo = "owner spend"
+  balanceOf w.stranger >>= (=== 500.0)
+  -- The policy now points at the new holding, so the agent can still spend.
+  request w 40.0 w.merchant >>= expectExecuted
+  balanceOf w.owner >>= (=== 460.0)
+  -- Only the agent's spend counts against the agent's window.
+  (_, p) <- currentPolicy w
+  map snd p.recentSpends === [40.0]
+
+testUpdatePolicyChecksHolding : Script ()
+testUpdatePolicyChecksHolding = script do
+  w <- setupWorld defaultLimits
+  (_, p) <- currentPolicy w
+  -- A holding the agent isn't an observer on would break every request.
+  invisible <- submit w.bank do
+    createCmd WalletHolding with issuer = w.bank; owner = w.owner; agent = w.owner; amount = 10.0
+  let update newHolding = exerciseCmd w.policy UpdatePolicy with
+        newHolding
+        newPerTxCap = 100.0
+        newDailyCap = p.dailyCap
+        newAllowedCounterparties = p.allowedCounterparties
+        newAutoApproveThreshold = p.autoApproveThreshold
+        newWindowLength = p.windowLength
+  submitMustFail w.owner (update invisible)
+  newCid <- submit w.owner (update p.holding)
+  Some updated <- queryContractId w.owner newCid
+  updated.perTxCap === 100.0
+
+testApproveExecutesAndCountsTowardCap : Script ()
+testApproveExecutesAndCountsTowardCap = script do
+  w <- setupWorld defaultLimits
+  pendingCid <- request w 100.0 w.merchant >>= expectEscalated
+  (fresh, _) <- currentPolicy w
+  result <- submit w.owner (exerciseCmd pendingCid Approve with freshPolicy = fresh) >>= expectExecuted
+  Some record <- queryContractId w.owner result.executed
+  record.via === OwnerApproved
+  balanceOf w.merchant >>= (=== 100.0)
+  gone <- queryContractId w.owner pendingCid
+  assert (isNone gone)
+  -- Owner-approved agent requests still use up the agent's window.
+  (_, p) <- currentPolicy w
+  map snd p.recentSpends === [100.0]
+
+testApproveRejectsWhenBalanceIsGone : Script ()
+testApproveRejectsWhenBalanceIsGone = script do
+  w <- setupWorld defaultLimits with startingBalance = 120.0
+  pendingCid <- request w 100.0 w.merchant >>= expectEscalated
+  request w 50.0 w.merchant >>= expectExecuted
+  (fresh, _) <- currentPolicy w
+  rejectedCid <- submit w.owner (exerciseCmd pendingCid Approve with freshPolicy = fresh) >>= expectRejected
+  Some rejected <- queryContractId w.owner rejectedCid
+  rejected.reasons === [reasonInsufficientBalance]
+  balanceOf w.owner >>= (=== 70.0)
+  gone <- queryContractId w.owner pendingCid
+  assert (isNone gone)
+
+testApproveRefusesAnotherWalletsPolicy : Script ()
+testApproveRefusesAnotherWalletsPolicy = script do
+  w <- setupWorld defaultLimits
+  otherAgent <- uniqueParty "OtherAgent"
+  otherHolding <- submit w.bank do
+    createCmd WalletHolding with issuer = w.bank; owner = w.owner; agent = otherAgent; amount = 1000.0
+  otherPolicy <- submit w.owner do
+    createCmd WalletPolicy with
+      owner = w.owner
+      agent = otherAgent
+      issuer = w.bank
+      holding = otherHolding
+      perTxCap = 1000.0
+      dailyCap = 1000.0
+      allowedCounterparties = []
+      autoApproveThreshold = 0.0
+      windowLength = hours 24
+      recentSpends = []
+  pendingCid <- request w 100.0 w.merchant >>= expectEscalated
+  submitMustFail w.owner do
+    exerciseCmd pendingCid Approve with freshPolicy = otherPolicy
+
+testRejectKeepsReasons : Script ()
+testRejectKeepsReasons = script do
+  w <- setupWorld defaultLimits
+  pendingCid <- request w 250.0 w.stranger >>= expectEscalated
+  rejectedCid <- submit w.owner do exerciseCmd pendingCid Reject
+  Some rejected <- queryContractId w.agent rejectedCid
+  rejected.via === OwnerRejected
+  rejected.reasons === [reasonNotAllowlisted, reasonOverPerTxCap]
+  balanceOf w.owner >>= (=== 1000.0)
+
+-- Daml Script submits one at a time, so this shows the mechanism behind a race:
+-- once a spend commits, anything still aimed at the old policy id is refused.
+testStalePolicyIdFailsAndRetrySucceeds : Script ()
+testStalePolicyIdFailsAndRetrySucceeds = script do
+  w <- setupWorld defaultLimits
+  submit w.agent do
+    exerciseCmd w.policy RequestTransfer with amount = 40.0; counterparty = w.merchant; memo = "wins"
+  -- A second spend and an escalation both aimed at the archived id fail.
+  submitMustFail w.agent do
+    exerciseCmd w.policy RequestTransfer with amount = 40.0; counterparty = w.merchant; memo = "loses"
+  submitMustFail w.agent do
+    exerciseCmd w.policy RequestTransfer with amount = 10.0; counterparty = w.stranger; memo = "loses"
+  -- Retrying against the live id works, and nothing was double-spent.
+  request w 40.0 w.merchant >>= expectExecuted
+  balanceOf w.merchant >>= (=== 80.0)
+
+-- The pitch: RequestTransfer is the agent's only path to moving funds.
+testAgentHasNoOtherPath : Script ()
+testAgentHasNoOtherPath = script do
+  w <- setupWorld defaultLimits
+  (_, p) <- currentPolicy w
+  pendingCid <- request w 100.0 w.merchant >>= expectEscalated
+  (fresh, _) <- currentPolicy w
+  now <- getTime
+  submitMustFail w.agent do
+    exerciseCmd p.holding Transfer with to = w.agent; qty = 10.0
+  submitMustFail w.agent do
+    archiveCmd p.holding
+  submitMustFail w.agent do
+    createCmd WalletHolding with issuer = w.bank; owner = w.agent; agent = w.agent; amount = 1000000.0
+  submitMustFail w.agent do
+    exerciseCmd fresh OwnerTransfer with to = w.agent; qty = 10.0; memo = "steal"
+  submitMustFail w.agent do
+    exerciseCmd fresh UpdatePolicy with
+      newHolding = p.holding
+      newPerTxCap = 1000000.0
+      newDailyCap = 1000000.0
+      newAllowedCounterparties = [w.agent]
+      newAutoApproveThreshold = 1000000.0
+      newWindowLength = p.windowLength
+  submitMustFail w.agent do
+    archiveCmd fresh
+  submitMustFail w.agent do
+    exerciseCmd pendingCid Approve with freshPolicy = fresh
+  submitMustFail w.agent do
+    createCmd ExecutedTransfer with
+      owner = w.owner; agent = w.agent; counterparty = w.agent
+      amount = 10.0; memo = "forged"; via = AutoApproved; executedAt = now
+  submitMustFail w.agent do
+    createCmd WalletPolicy with
+      owner = w.owner; agent = w.agent; issuer = w.bank; holding = p.holding
+      perTxCap = 1000000.0; dailyCap = 1000000.0; allowedCounterparties = [w.agent]
+      autoApproveThreshold = 1000000.0; windowLength = p.windowLength; recentSpends = []
+  -- Even inside RequestTransfer, the agent can't pay itself: it isn't allowlisted.
+  request w 10.0 w.agent >>= expectEscalated
+  balanceOf w.owner >>= (=== 1000.0)
+  balanceOf w.agent >>= (=== 0.0)
+
+testPrivacyByParty : Script ()
+testPrivacyByParty = script do
+  w <- setupWorld defaultLimits
+  request w 40.0 w.merchant >>= expectExecuted
+  request w 10.0 w.stranger >>= expectEscalated
+
+  -- An unrelated party sees nothing at all.
+  outsiderPolicies <- query @WalletPolicy w.outsider
+  outsiderHoldings <- query @WalletHolding w.outsider
+  outsiderPending <- query @PendingApproval w.outsider
+  outsiderExecuted <- query @ExecutedTransfer w.outsider
+  outsiderRejected <- query @RejectedTransfer w.outsider
+  length outsiderPolicies === 0
+  length outsiderHoldings === 0
+  length outsiderPending === 0
+  length outsiderExecuted === 0
+  length outsiderRejected === 0
+
+  -- Bank sees the holdings it signs, but not the caps, allowlist or requests.
+  bankHoldings <- query @WalletHolding w.bank
+  bankPolicies <- query @WalletPolicy w.bank
+  bankPending <- query @PendingApproval w.bank
+  bankExecuted <- query @ExecutedTransfer w.bank
+  length bankHoldings === 2
+  length bankPolicies === 0
+  length bankPending === 0
+  length bankExecuted === 0
+
+  -- The merchant sees its own money and receipt, nothing about the policy.
+  merchantHoldings <- query @WalletHolding w.merchant
+  merchantPolicies <- query @WalletPolicy w.merchant
+  merchantPending <- query @PendingApproval w.merchant
+  merchantExecuted <- query @ExecutedTransfer w.merchant
+  length merchantHoldings === 1
+  length merchantPolicies === 0
+  length merchantPending === 0
+  length merchantExecuted === 1
+
+  -- The stranger was named in an escalated request but still sees nothing.
+  strangerPending <- query @PendingApproval w.stranger
+  strangerPolicies <- query @WalletPolicy w.stranger
+  length strangerPending === 0
+  length strangerPolicies === 0
