@@ -1,0 +1,33 @@
+module Wallet.Holding where
+
+-- | The only place funds live. Signed by the issuer alone, so moving it needs
+-- the owner's authority (via Transfer) and never the agent's.
+template WalletHolding
+  with
+    issuer : Party
+    owner : Party
+    -- For a holding received from a transfer this equals `owner`: the
+    -- recipient has no agent of its own.
+    agent : Party
+    amount : Decimal
+  where
+    signatory issuer
+    observer owner, agent
+    ensure amount >= 0.0
+
+    -- Returns (owner's remainder, recipient's new holding).
+    choice Transfer : (ContractId WalletHolding, ContractId WalletHolding)
+      with
+        to : Party
+        qty : Decimal
+      controller owner
+      do
+        assertMsg "qty must be positive" (qty > 0.0)
+        assertMsg "insufficient balance" (qty <= amount)
+        remainder <- create this with amount = amount - qty
+        received <- create WalletHolding with
+          issuer
+          owner = to
+          agent = to
+          amount = qty
+        pure (remainder, received)

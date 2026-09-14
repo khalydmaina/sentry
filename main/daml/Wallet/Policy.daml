@@ -1,0 +1,198 @@
+module Wallet.Policy where
+
+import DA.Time
+import Wallet.Holding
+import Wallet.Records
+
+reasonInsufficientBalance : Text
+reasonInsufficientBalance = "insufficient balance"
+
+reasonNotAllowlisted : Text
+reasonNotAllowlisted = "counterparty not allowlisted"
+
+reasonOverPerTxCap : Text
+reasonOverPerTxCap = "exceeds per-transaction cap"
+
+reasonOverDailyCap : Text
+reasonOverDailyCap = "exceeds daily cap"
+
+reasonAboveThreshold : Text
+reasonAboveThreshold = "above auto-approve threshold, owner sign-off required"
+
+data SpendResult = SpendResult
+  with
+    newPolicy : ContractId WalletPolicy
+    executed : ContractId ExecutedTransfer
+  deriving (Eq, Show)
+
+data Outcome
+  = Executed SpendResult
+  | Escalated (ContractId PendingApproval)
+  | Rejected (ContractId RejectedTransfer)
+  deriving (Eq, Show)
+
+-- | Agent spends still inside the rolling window at `now`.
+liveSpends : Time -> WalletPolicy -> [(Time, Decimal)]
+liveSpends now p = filter (\(t, _) -> subTime now t < p.windowLength) p.recentSpends
+
+-- | Every policy rule the request breaks. Balance is checked separately
+-- because no owner sign-off can fix it.
+policyFailures : WalletPolicy -> Decimal -> Party -> Decimal -> [Text]
+policyFailures p windowTotal counterparty amount =
+  [reasonNotAllowlisted | not (counterparty `elem` p.allowedCounterparties)]
+    ++ [reasonOverPerTxCap | amount > p.perTxCap]
+    ++ [reasonOverDailyCap | windowTotal + amount > p.dailyCap]
+
+-- | Moves funds out of the policy's holding, records it, and writes the
+-- replacement policy. Needs the owner's authority, and the old policy must
+-- already be archived by the caller.
+executeSpend : WalletPolicy -> Party -> Decimal -> Text -> ExecutionPath -> [(Time, Decimal)] -> Time -> Update SpendResult
+executeSpend policy counterparty amount memo via spends now = do
+  (remainder, _) <- exercise policy.holding Transfer with
+    to = counterparty
+    qty = amount
+  executed <- create ExecutedTransfer with
+    owner = policy.owner
+    agent = policy.agent
+    counterparty
+    amount
+    memo
+    via
+    executedAt = now
+  newPolicy <- create policy with
+    holding = remainder
+    recentSpends = spends
+  pure SpendResult with newPolicy; executed
+
+-- | The agent's delegated spending authority. Owner-signed, so choices on it
+-- carry the owner's authority, and RequestTransfer is the agent's only way to
+-- use it.
+template WalletPolicy
+  with
+    owner : Party
+    agent : Party
+    issuer : Party
+    holding : ContractId WalletHolding
+    perTxCap : Decimal
+    dailyCap : Decimal
+    allowedCounterparties : [Party]
+    autoApproveThreshold : Decimal
+    windowLength : RelTime
+    recentSpends : [(Time, Decimal)]
+  where
+    signatory owner
+    observer agent
+    ensure owner /= agent
+      && perTxCap >= 0.0
+      && dailyCap >= 0.0
+      && autoApproveThreshold >= 0.0
+      && windowLength > seconds 0
+
+    -- Nonconsuming: only the branch that moves money archives and replaces
+    -- the policy, so escalations and rejections never block a real spend.
+    nonconsuming choice RequestTransfer : Outcome
+      with
+        amount : Decimal
+        counterparty : Party
+        memo : Text
+      controller agent
+      do
+        assertMsg "amount must be positive" (amount > 0.0)
+        now <- getTime
+        let live = liveSpends now this
+            windowTotal = sum (map snd live)
+        h <- fetch holding
+        if amount > h.amount
+          then Rejected <$> create RejectedTransfer with
+            owner; agent; counterparty; amount; memo
+            reasons = [reasonInsufficientBalance]
+            via = AutoRejected
+            rejectedAt = now
+          else do
+            let failures = policyFailures this windowTotal counterparty amount
+            if null failures && amount <= autoApproveThreshold
+              then do
+                archive self
+                Executed <$> executeSpend this counterparty amount memo AutoApproved ((now, amount) :: live) now
+              else Escalated <$> create PendingApproval with
+                owner; agent; counterparty; amount; memo
+                reasons = if null failures then [reasonAboveThreshold] else failures
+                requestedAt = now
+
+    -- The owner spending their own funds: no caps, and not counted against
+    -- the agent's window. Exists so owner spends keep `holding` current.
+    choice OwnerTransfer : SpendResult
+      with
+        to : Party
+        qty : Decimal
+        memo : Text
+      controller owner
+      do
+        now <- getTime
+        executeSpend this to qty memo OwnerDirect recentSpends now
+
+    choice UpdatePolicy : ContractId WalletPolicy
+      with
+        newHolding : ContractId WalletHolding
+        newPerTxCap : Decimal
+        newDailyCap : Decimal
+        newAllowedCounterparties : [Party]
+        newAutoApproveThreshold : Decimal
+        newWindowLength : RelTime
+      controller owner
+      do
+        h <- fetch newHolding
+        -- A holding the agent can't see would make every request fail on fetch.
+        assertMsg "holding does not belong to this wallet"
+          (h.owner == owner && h.issuer == issuer && h.agent == agent)
+        create this with
+          holding = newHolding
+          perTxCap = newPerTxCap
+          dailyCap = newDailyCap
+          allowedCounterparties = newAllowedCounterparties
+          autoApproveThreshold = newAutoApproveThreshold
+          windowLength = newWindowLength
+
+-- | An out-of-policy request waiting on the owner.
+template PendingApproval
+  with
+    owner : Party
+    agent : Party
+    counterparty : Party
+    amount : Decimal
+    memo : Text
+    reasons : [Text]
+    requestedAt : Time
+  where
+    signatory owner, agent
+
+    -- `freshPolicy` must be looked up right before the call: every spend
+    -- replaces the policy contract.
+    choice Approve : Outcome
+      with
+        freshPolicy : ContractId WalletPolicy
+      controller owner
+      do
+        policy <- fetch freshPolicy
+        assertMsg "policy belongs to a different wallet"
+          (policy.owner == owner && policy.agent == agent)
+        now <- getTime
+        h <- fetch policy.holding
+        if amount > h.amount
+          then Rejected <$> create RejectedTransfer with
+            owner; agent; counterparty; amount; memo
+            reasons = [reasonInsufficientBalance]
+            via = AutoRejected
+            rejectedAt = now
+          else do
+            archive freshPolicy
+            Executed <$> executeSpend policy counterparty amount memo OwnerApproved ((now, amount) :: liveSpends now policy) now
+
+    choice Reject : ContractId RejectedTransfer
+      controller owner
+      do
+        now <- getTime
+        create RejectedTransfer with
+          owner; agent; counterparty; amount; memo; reasons
+          via = OwnerRejected
+          rejectedAt = now

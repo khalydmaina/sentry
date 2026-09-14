@@ -1,0 +1,42 @@
+module Wallet.Records where
+
+data ExecutionPath
+  = AutoApproved
+  | OwnerApproved
+  | OwnerDirect
+  deriving (Eq, Show)
+
+data RejectionPath
+  = AutoRejected
+  | OwnerRejected
+  deriving (Eq, Show)
+
+-- | Audit record for funds that actually moved. Only the owner signs, so the
+-- agent cannot fabricate one.
+template ExecutedTransfer
+  with
+    owner : Party
+    agent : Party
+    counterparty : Party
+    amount : Decimal
+    memo : Text
+    via : ExecutionPath
+    executedAt : Time
+  where
+    signatory owner
+    observer agent, counterparty
+
+-- | Audit record for a request that was refused, automatically or by the owner.
+template RejectedTransfer
+  with
+    owner : Party
+    agent : Party
+    counterparty : Party
+    amount : Decimal
+    memo : Text
+    reasons : [Text]
+    via : RejectionPath
+    rejectedAt : Time
+  where
+    signatory owner
+    observer agent
