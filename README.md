@@ -4,6 +4,18 @@ Spending limits an AI agent cannot argue with, enforced by Canton's ledger inste
 
 HackCanton Season 3 entry.
 
+## Provenance
+
+HackCanton Season 3 runs its delivery phase from 18 September to 9 October 2026, and
+judges score only work done inside that window. Work that predates it, disclosed as the
+rules require:
+
+- Commit `ddbdac9`, 14 September 2026. The Daml packages in `main/` and `test/` (three
+  templates, 18 script tests), the React desk in `app/`, and `scripts/ledger.sh`. Built
+  before the delivery phase opened and unchanged since.
+
+Every commit after `ddbdac9` was made during the delivery phase.
+
 ## Layout
 
 ```
