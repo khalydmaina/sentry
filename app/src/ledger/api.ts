@@ -79,6 +79,22 @@ export async function userParty(userId: string, node: Node = 'wallet'): Promise<
   return r.user.primaryParty
 }
 
+/**
+ * Whether this participant knows the party at all.
+ *
+ * A wallet connected to a different network hands back a party from that
+ * network, which looks fine until a command is submitted. Asking first turns a
+ * confusing failure later into a clear message now.
+ */
+export async function partyKnown(party: string, node: Node = 'wallet'): Promise<boolean> {
+  try {
+    const r = await call<{ partyDetails?: Array<{ party: string }> }>('GET', `${prefix(node)}/v2/parties/${encodeURIComponent(party)}`)
+    return Boolean(r.partyDetails?.length)
+  } catch {
+    return false
+  }
+}
+
 export async function ledgerEnd(node: Node = 'wallet'): Promise<number> {
   const r = await call<{ offset: number }>('GET', `${prefix(node)}/v2/state/ledger-end`)
   return r.offset
