@@ -1,0 +1,192 @@
+-- | Shared control over clearing a held request.
+--
+-- Sentry already refuses to let an agent exceed its delegation. These tests
+-- cover the other half: that the owner's own release of a held request can
+-- require more than one signature, and that the threshold is enforced by
+-- BitSafe's GovernanceRules rather than by anything Sentry counts itself.
+--
+-- The claim under test is the one the challenge asks for: a governed action
+-- cannot execute below the confirmation threshold, and succeeds once the
+-- threshold is met.
+module Test.Governed where
+
+import DA.Assert
+import DA.Set as Set
+import DA.Time
+import Daml.Script
+
+import Governance.Action (GovernableAction)
+import Governance.Confirmation (GovernanceConfirmation)
+import Governance.Rules
+import Test.Fixture
+import Wallet.Governed
+import Wallet.Policy
+import Wallet.Records
+
+-- | A wallet whose owner is governed by `threshold` of three members.
+data GovernedWorld = GovernedWorld
+  with
+    w : World
+    rules : ContractId GovernanceRules
+    alice : Party
+    bob : Party
+    carol : Party
+
+-- | Members are allocated separately from the demo roles: they govern the
+-- owner party, they are not counterparties to it.
+setupGoverned : Int -> Script GovernedWorld
+setupGoverned threshold = do
+  w <- setupWorld defaultLimits
+  [alice, bob, carol] <- mapA uniqueParty ["Alice", "Bob", "Carol"]
+  rules <- submit w.owner do
+    createCmd GovernanceRules with
+      governanceParty = w.owner
+      members = Set.fromList [alice, bob, carol]
+      threshold
+      actionConfirmationTimeout = hours 1
+      additionalProposers = None
+  pure GovernedWorld with ..
+
+-- | Raises a request the policy holds, and proposes releasing it.
+proposeRelease : GovernedWorld -> Script (ContractId GovernableAction, ContractId PendingApproval)
+proposeRelease g = do
+  -- 120 is inside both caps but above the auto-approve threshold, so the
+  -- contract holds it for the owner rather than settling it.
+  pendingCid <- request g.w 120.0 g.w.merchant >>= expectEscalated
+  (policyCid, _) <- currentPolicy g.w
+  proposalCid <- submit g.w.owner do
+    createCmd GovernedApproval with
+      owner = g.w.owner
+      proposer = g.alice
+      pending = pendingCid
+      freshPolicy = policyCid
+      memo = "supplier invoice, above the auto-approve threshold"
+  pure (toInterfaceContractId @GovernableAction proposalCid, pendingCid)
+
+-- | Members do not observe the governance contracts. Each one hosts the
+-- governance party on its own participant and reads as it, so every member
+-- action here acts as the member and reads as the owner.
+asMember : GovernedWorld -> Party -> SubmitOptions
+asMember g member = actAs member <> readAs g.w.owner
+
+confirm : GovernedWorld -> ContractId GovernableAction -> Party -> Script (ContractId GovernanceConfirmation)
+confirm g proposalCid member = do
+  r <- submit (asMember g member) do
+    exerciseCmd g.rules GovernanceRules_ConfirmAction with
+      confirmer = member
+      actionProposalCid = proposalCid
+  pure r.confirmationCid
+
+-- | One confirmation is not enough when two are required. The funds stay put.
+testBelowThresholdCannotRelease : Script ()
+testBelowThresholdCannotRelease = script do
+  g <- setupGoverned 2
+  (proposalCid, _) <- proposeRelease g
+  only <- confirm g proposalCid g.alice
+
+  submitMustFail (asMember g g.alice) do
+    exerciseCmd g.rules GovernanceRules_ExecuteConfirmedAction with
+      executor = g.alice
+      actionProposalCid = proposalCid
+      confirmations = [only]
+
+  -- Nothing moved, and the request is still waiting.
+  balanceOf g.w.owner >>= (=== 1000.0)
+  balanceOf g.w.merchant >>= (=== 0.0)
+  executed <- query @ExecutedTransfer g.w.owner
+  length executed === 0
+  pending <- query @PendingApproval g.w.owner
+  length pending === 1
+
+-- | The same proposal, once a second member confirms, releases the funds.
+testThresholdReleases : Script ()
+testThresholdReleases = script do
+  g <- setupGoverned 2
+  (proposalCid, _) <- proposeRelease g
+  first <- confirm g proposalCid g.alice
+  second <- confirm g proposalCid g.bob
+
+  submit (asMember g g.alice) do
+    exerciseCmd g.rules GovernanceRules_ExecuteConfirmedAction with
+      executor = g.alice
+      actionProposalCid = proposalCid
+      confirmations = [first, second]
+
+  balanceOf g.w.owner >>= (=== 880.0)
+  balanceOf g.w.merchant >>= (=== 120.0)
+  -- The release is recorded as an owner-approved spend, exactly as a single
+  -- owner clearing it by hand would have been.
+  [(_, executed)] <- query @ExecutedTransfer g.w.owner
+  executed.amount === 120.0
+  executed.via === OwnerApproved
+  pending <- query @PendingApproval g.w.owner
+  length pending === 0
+
+-- | Two confirmations from the same member are one member's opinion twice.
+testDuplicateConfirmerRejected : Script ()
+testDuplicateConfirmerRejected = script do
+  g <- setupGoverned 2
+  (proposalCid, _) <- proposeRelease g
+  first <- confirm g proposalCid g.alice
+  again <- confirm g proposalCid g.alice
+
+  submitMustFail (asMember g g.alice) do
+    exerciseCmd g.rules GovernanceRules_ExecuteConfirmedAction with
+      executor = g.alice
+      actionProposalCid = proposalCid
+      confirmations = [first, again]
+  balanceOf g.w.merchant >>= (=== 0.0)
+
+-- | Someone outside the member set cannot confirm, however keen they are.
+testNonMemberCannotConfirm : Script ()
+testNonMemberCannotConfirm = script do
+  g <- setupGoverned 2
+  (proposalCid, _) <- proposeRelease g
+  submitMustFail (actAs g.w.agent <> readAs g.w.owner) do
+    exerciseCmd g.rules GovernanceRules_ConfirmAction with
+      confirmer = g.w.agent
+      actionProposalCid = proposalCid
+
+-- | Refusing a held request is governed too: one member cannot block a
+-- payment the others want released.
+testGovernedRejectionNeedsThreshold : Script ()
+testGovernedRejectionNeedsThreshold = script do
+  g <- setupGoverned 2
+  pendingCid <- request g.w 120.0 g.w.merchant >>= expectEscalated
+  proposalCid <- toInterfaceContractId @GovernableAction <$> submit g.w.owner do
+    createCmd GovernedRejection with
+      owner = g.w.owner
+      proposer = g.alice
+      pending = pendingCid
+      memo = "duplicate of an invoice already paid"
+  only <- confirm g proposalCid g.alice
+  submitMustFail (asMember g g.alice) do
+    exerciseCmd g.rules GovernanceRules_ExecuteConfirmedAction with
+      executor = g.alice
+      actionProposalCid = proposalCid
+      confirmations = [only]
+
+  second <- confirm g proposalCid g.bob
+  submit (asMember g g.alice) do
+    exerciseCmd g.rules GovernanceRules_ExecuteConfirmedAction with
+      executor = g.alice
+      actionProposalCid = proposalCid
+      confirmations = [only, second]
+
+  [(_, rejected)] <- query @RejectedTransfer g.w.owner
+  rejected.via === OwnerRejected
+  balanceOf g.w.owner >>= (=== 1000.0)
+
+-- | A single-member governance is the behaviour Sentry had before: one
+-- signature releases. Threshold is a policy choice, not a rewrite.
+testSingleMemberStillWorks : Script ()
+testSingleMemberStillWorks = script do
+  g <- setupGoverned 1
+  (proposalCid, _) <- proposeRelease g
+  only <- confirm g proposalCid g.alice
+  submit (asMember g g.alice) do
+    exerciseCmd g.rules GovernanceRules_ExecuteConfirmedAction with
+      executor = g.alice
+      actionProposalCid = proposalCid
+      confirmations = [only]
+  balanceOf g.w.merchant >>= (=== 120.0)

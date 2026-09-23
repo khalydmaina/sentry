@@ -1,0 +1,95 @@
+-- | Clearing a held request, under shared control.
+--
+-- Sentry's `PendingApproval` is cleared by the owner. That is right for one
+-- person and wrong for a treasury, where releasing funds above a threshold
+-- should take more than one signature. This module makes that clearing a
+-- governed action: the owner party is a governance party with members and a
+-- confirmation threshold, and the release only happens once enough members
+-- have confirmed it.
+--
+-- The threshold engine is BitSafe's Decentralization Manager. `GovernanceRules`
+-- holds the members and the threshold and refuses to execute below it; this
+-- module supplies the domain action it executes. Nothing here counts
+-- confirmations or checks a threshold, in the same way that nothing in the
+-- agent's client checks a spending cap: that decision belongs to a contract
+-- the proposer does not control.
+module Wallet.Governed where
+
+import Governance.Action
+import Wallet.Policy
+
+-- | A proposal to clear one held request.
+--
+-- Both contract ids are captured when the proposal is made. Every spend
+-- replaces the policy contract, so a spend landing between proposal and
+-- execution leaves `freshPolicy` stale and execution fails rather than
+-- clearing against a policy that no longer exists. `Repoint` exists for that
+-- case, and deliberately cannot change which request is being released.
+template GovernedApproval
+  with
+    owner : Party
+      -- ^ The governance party. Its authority flows through
+      -- GovernableAction_Execute once the threshold is met.
+    proposer : Party
+      -- ^ The member who raised this proposal. GovernanceRules checks that
+      -- this party is entitled to propose.
+    pending : ContractId PendingApproval
+      -- ^ The held request to release. Fixed at proposal time: members confirm
+      -- a specific request, not a blank cheque.
+    freshPolicy : ContractId WalletPolicy
+      -- ^ The policy to charge the spend against, as it stood when proposed.
+    memo : Text
+      -- ^ Why this release was proposed, recorded for the audit trail.
+  where
+    signatory owner
+    observer proposer
+
+    interface instance GovernableAction for GovernedApproval where
+      view = GovernableActionView with
+        governanceParty = owner
+        proposer
+        actionLabel = "ApproveHeldTransfer"
+        description = memo
+
+      -- Runs only after GovernanceRules has collected enough confirmations.
+      -- The owner's authority arrives through the exercise chain, which is
+      -- what lets Approve run here without any one member holding it.
+      executeImpl = do
+        _ <- exercise pending Approve with freshPolicy
+        pure ()
+
+    -- | Point the proposal at the current policy after a spend replaced it.
+    -- The held request cannot change, so a repoint cannot quietly redirect
+    -- confirmations that members have already given to something else.
+    choice Repoint : ContractId GovernedApproval
+      with
+        newPolicy : ContractId WalletPolicy
+      controller proposer
+      do
+        create this with freshPolicy = newPolicy
+
+-- | A proposal to refuse a held request outright.
+--
+-- Refusing is also a decision worth sharing: a single member should not be
+-- able to block a payment the others want released, any more than they should
+-- be able to release one alone.
+template GovernedRejection
+  with
+    owner : Party
+    proposer : Party
+    pending : ContractId PendingApproval
+    memo : Text
+  where
+    signatory owner
+    observer proposer
+
+    interface instance GovernableAction for GovernedRejection where
+      view = GovernableActionView with
+        governanceParty = owner
+        proposer
+        actionLabel = "RejectHeldTransfer"
+        description = memo
+
+      executeImpl = do
+        _ <- exercise pending Reject
+        pure ()
