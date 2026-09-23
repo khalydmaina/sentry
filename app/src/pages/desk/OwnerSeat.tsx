@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { AmountField, Button, Micro, PartyToken } from '../../components/ui'
 import { useLedger } from '../../ledger/LedgerContext'
-import { confirmationsFor, confirmRelease, proposalFor, proposeRelease, releaseApproved } from '../../ledger/governance'
+import { confirmationsFor, confirmRelease, proposalFor, proposeRefusal, proposeRelease, releaseApproved } from '../../ledger/governance'
 import { useWallet } from '../../ledger/WalletContext'
 import { approve, ownerTransfer, reject, updatePolicy, type Parties, type Policy, type Role } from '../../ledger/sentry'
 import { amount, clock } from '../../lib/format'
@@ -286,7 +286,7 @@ function SharedControl({
   busy: string | null
   act: (key: string, run: () => Promise<Notice>) => void
 }) {
-  const { governance, members, ownerParty, policy, roleOf } = useLedger()
+  const { governance, members, ownerParty, policy } = useLedger()
   if (!governance?.rules || !ownerParty || !policy || members.length === 0) return null
 
   const rules = governance.rules
@@ -299,21 +299,40 @@ function SharedControl({
     <div className="shared-control">
       <Micro>
         Shared control · {confirmations.length} of {rules.threshold} confirmations
+        {proposal ? ` · ${proposal.kind}` : ''}
       </Micro>
       {!proposal ? (
-        <Button
-          small
-          busy={busy === `propose:${pending}`}
-          disabled={Boolean(busy)}
-          onClick={() =>
-            act(`propose:${pending}`, async () => {
-              await proposeRelease(ownerParty, members[0].party, pending, policy.cid, 'released under shared control')
-              return { kind: 'text', tone: 'info', title: 'Proposed. Each member confirms from their own node.' }
-            })
-          }
-        >
-          Propose release
-        </Button>
+        <div className="members">
+          <Button
+            small
+            busy={busy === `propose:${pending}`}
+            disabled={Boolean(busy)}
+            onClick={() =>
+              act(`propose:${pending}`, async () => {
+                await proposeRelease(ownerParty, members[0].party, pending, policy.cid, 'released under shared control')
+                return { kind: 'text', tone: 'info', title: 'Release proposed. Each member confirms from their own node.' }
+              })
+            }
+          >
+            Propose release
+          </Button>
+          {/* Refusing is governed too: one member should not be able to block a
+              payment the others want released. */}
+          <Button
+            small
+            variant="danger"
+            busy={busy === `refuse:${pending}`}
+            disabled={Boolean(busy)}
+            onClick={() =>
+              act(`refuse:${pending}`, async () => {
+                await proposeRefusal(ownerParty, members[0].party, pending, 'refused under shared control')
+                return { kind: 'text', tone: 'info', title: 'Refusal proposed. Each member confirms from their own node.' }
+              })
+            }
+          >
+            Propose refusal
+          </Button>
+        </div>
       ) : (
         <div className="members">
           {members.map((m) => {
@@ -348,13 +367,15 @@ function SharedControl({
               })
             }
           >
-            Release{met ? '' : ` on ${confirmations.length}`}
+            {proposal.kind === 'refusal' ? 'Refuse' : 'Release'}
+            {met ? '' : ` on ${confirmations.length}`}
           </Button>
         </div>
       )}
       <span className="help">
-        {roleOf(proposal?.proposer ?? '') ?? members.map((m) => m.role).join(' and ')} govern this wallet, from{' '}
-        {members.length > 1 ? 'different participants' : 'one participant'}.
+        {members.map((m) => m.role).join(' and ')} govern this wallet, from{' '}
+        {members.length > 1 ? 'different participants' : 'one participant'}. The Approve and Reject buttons above act as the owner alone, which shared control adds
+        to rather than replaces.
       </span>
     </div>
   )

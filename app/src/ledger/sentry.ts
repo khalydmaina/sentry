@@ -17,8 +17,27 @@ export const TEMPLATES = {
   rejected: `${PKG}:Wallet.Records:RejectedTransfer`,
 } as const
 
-export type TemplateName = 'WalletHolding' | 'WalletPolicy' | 'PendingApproval' | 'ExecutedTransfer' | 'RejectedTransfer'
+export type TemplateName =
+  | 'WalletHolding'
+  | 'WalletPolicy'
+  | 'PendingApproval'
+  | 'ExecutedTransfer'
+  | 'RejectedTransfer'
+  | 'GovernanceRules'
+  | 'GovernedApproval'
+  | 'GovernedRejection'
+  | 'GovernanceConfirmation'
+
+/**
+ * The rows of the privacy matrix, in two groups.
+ *
+ * The wallet's own contracts come first. The governance contracts follow,
+ * because who holds those answers a separate question: shared control over the
+ * held queue is only shared if the members' nodes actually hold the proposals
+ * and confirmations.
+ */
 export const TEMPLATE_NAMES: TemplateName[] = ['WalletHolding', 'WalletPolicy', 'PendingApproval', 'ExecutedTransfer', 'RejectedTransfer']
+export const GOVERNANCE_TEMPLATE_NAMES: TemplateName[] = ['GovernanceRules', 'GovernedApproval', 'GovernedRejection', 'GovernanceConfirmation']
 
 export function templateName(templateId: string): string {
   return templateId.split(':').pop() ?? templateId

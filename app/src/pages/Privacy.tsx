@@ -4,7 +4,7 @@ import { Banner, Micro, PartyToken } from '../components/ui'
 import { NODES, NODE_NAME, NODE_PORT, NODE_ROLE, type Node } from '../ledger/api'
 import { useLedger } from '../ledger/LedgerContext'
 import { useWallet } from '../ledger/WalletContext'
-import { loadView, ledgerEndOf, ROLE_NODE, ROLES, TEMPLATE_NAMES, templateName, type Role, type View } from '../ledger/sentry'
+import { GOVERNANCE_TEMPLATE_NAMES, loadView, ledgerEndOf, ROLE_NODE, ROLES, TEMPLATE_NAMES, templateName, type Role, type View } from '../ledger/sentry'
 import { partyId } from '../lib/format'
 
 export function Privacy() {
@@ -119,9 +119,12 @@ function PrivacyBody() {
             </tr>
           </thead>
           <tbody>
-            {TEMPLATE_NAMES.map((t) => (
+            {[...TEMPLATE_NAMES, ...GOVERNANCE_TEMPLATE_NAMES].map((t) => (
               <tr key={t}>
-                <td style={{ color: 'var(--bone)' }}>{t}</td>
+                <td style={{ color: 'var(--bone)' }}>
+                  {t}
+                  {GOVERNANCE_TEMPLATE_NAMES.includes(t) && <span style={{ color: 'var(--mute)' }}> · governance</span>}
+                </td>
                 {NODES.flatMap((n) =>
                   onNode(n).map((c, i) => {
                     const num = count(c.key, t)
