@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { LedgerGate } from '../components/LedgerGate'
 import { Banner, Micro, PartyToken } from '../components/ui'
-import { NODES, NODE_NAME, NODE_PORT, type Node } from '../ledger/api'
+import { NODES, NODE_NAME, NODE_PORT, NODE_ROLE, type Node } from '../ledger/api'
 import { useLedger } from '../ledger/LedgerContext'
 import { useWallet } from '../ledger/WalletContext'
 import { loadView, ledgerEndOf, ROLE_NODE, ROLES, TEMPLATE_NAMES, templateName, type Role, type View } from '../ledger/sentry'
@@ -12,12 +12,12 @@ export function Privacy() {
     <div className="page shell">
       <div className="page-head">
         <div>
-          <Micro>Privacy · queried live · two participant nodes</Micro>
+          <Micro>Privacy · queried live · three participant nodes</Micro>
           <h1 className="h1">Who sees what, asked of each node.</h1>
         </div>
         <p className="section-note">
-          The owner and the agent are hosted by one Canton participant. The bank, the merchant and everyone else are hosted by a second one. Both sit on the same
-          synchronizer and settle the same transactions. Each column below is an active-contracts query put to the node that hosts that party.
+          Three Canton participants on one synchronizer, settling the same transactions. The owner is hosted by two of them; the bank, the merchant and the rest are
+          hosted by the third, which does not host the owner. Each column is an active-contracts query put to one node, as one party it hosts.
         </p>
       </div>
       <LedgerGate>
@@ -48,6 +48,9 @@ function PrivacyBody() {
   // the six the script allocated.
   const columns: Column[] = [
     ...ROLES.map((r) => ({ key: r, label: r, party: parties?.[r] ?? '', node: ROLE_NODE[r] })),
+    // The owner is hosted by two participants, so it appears under each of
+    // them. Same party, two nodes, and the answers should match.
+    ...(parties ? [{ key: 'owner@governance', label: 'owner', party: parties.owner, node: 'governance' as Node }] : []),
     ...(identity && parties && !ROLES.some((r) => parties[r] === identity.partyId)
       ? [{ key: 'connected', label: identity.label, party: identity.partyId, node: 'wallet' as Node }]
       : []),
@@ -89,7 +92,7 @@ function PrivacyBody() {
       <Banner kind={policySeenOffWallet ? 'reject' : 'allow'} title={policySeenOffWallet ? 'The policy left the wallet node.' : 'The policy never leaves the wallet node.'}>
         {policySeenOffWallet
           ? 'A counterparty node is holding the WalletPolicy. That should not happen and is worth investigating.'
-          : 'The bank minted the holding and the merchant was paid, both from the second node. Neither received the WalletPolicy: it was never delivered to that participant, not merely filtered out of its answer.'}
+          : 'The owner is hosted by two participants and both answer for it with the policy. The third hosts the bank that issued the funds and the merchant that was paid, and never receives the policy at all: not filtered out of its answer, never delivered to it.'}
       </Banner>
 
       <div className="scroll-x">
@@ -98,7 +101,7 @@ function PrivacyBody() {
             <tr>
               <th rowSpan={2}>Template</th>
               {NODES.map((n) => (
-                <th key={n} colSpan={onNode(n).length} style={{ textAlign: 'center', borderLeft: '1px solid var(--rule)' }}>
+                <th key={n} colSpan={onNode(n).length} style={{ textAlign: 'center', borderLeft: '1px solid var(--rule)' }} title={NODE_ROLE[n]}>
                   {NODE_NAME[n]} <span style={{ color: 'var(--mute)' }}>:{NODE_PORT[n]} · offset {ends[n]}</span>
                 </th>
               ))}
@@ -109,6 +112,7 @@ function PrivacyBody() {
                   <th key={c.key} style={i === 0 ? { borderLeft: '1px solid var(--rule)' } : undefined}>
                     {c.label}
                     {c.key === 'connected' && <span style={{ color: 'var(--signal)' }}> ·wallet</span>}
+                    {c.key === 'owner@governance' && <span style={{ color: 'var(--mute)' }}> ·2nd host</span>}
                   </th>
                 )),
               )}
