@@ -29,6 +29,7 @@ app/                            React frontend over the JSON Ledger API
 agent/sentry-agent.mjs          The agent as a program, outside the browser
 scripts/two-node.conf           The second Canton participant
 scripts/ledger.sh               Both participants, package upload, demo parties
+scripts/mutants.sh              Breaks the policy rules on purpose, checks the tests notice
 ```
 
 `main` is the package deployed to the ledger. `test` holds scripts only, so `daml-script` never ships.
@@ -126,6 +127,28 @@ dpm script --dar .daml/dist/sentry-test-0.1.0.dar --upload-dar true \
   --ledger-host localhost --ledger-port 6865 --wall-clock-time \
   --json-test-summary summary.json
 ```
+
+### Are the tests worth anything?
+
+A passing suite proves the tests run, not that they would catch a mistake. `scripts/mutants.sh` makes seven one-character changes to the rules that decide whether money moves, and checks the suite fails on each:
+
+```sh
+./scripts/mutants.sh
+```
+
+```
+per-transaction cap boundary       | caught
+rolling cap boundary               | caught
+auto-approve threshold boundary    | caught
+allowlist check removed            | caught
+balance check boundary             | caught
+positive-amount guard weakened     | caught
+rolling window boundary            | caught
+
+7 of 7 mutants caught
+```
+
+It restores the contract with `git checkout`, so an interrupted run cannot leave a mutant behind. The first run of this scored 5 of 7: spending exactly the balance and a zero-amount request to an unlisted counterparty were both untested. Those two tests exist now.
 
 Canton refuses a changed package with a name and version it has already seen (`KNOWN_PACKAGE_VERSION`). After editing Daml, restart the ledger script or bump `version` in the relevant `daml.yaml`.
 
