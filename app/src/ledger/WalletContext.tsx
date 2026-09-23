@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { partyKnown } from './api'
 import { connectWallet, disconnectWallet, discoverProviders, WalletError, type Identity, type ProviderDetail } from './identity'
 
 export type WalletStatus = 'none' | 'available' | 'connecting' | 'connected' | 'error'
@@ -39,6 +40,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setError(null)
     try {
       const id = await connectWallet(detail)
+
+      // A wallet on another network connects perfectly well and then cannot do
+      // anything here, because its party does not exist on these participants
+      // and its own validator has never seen Sentry's package. Say so now
+      // rather than after a command fails.
+      if (!(await partyKnown(id.partyId))) {
+        await disconnectWallet(detail).catch(() => {})
+        setError(
+          `${detail.info.name} is connected to a different Canton network. Its party is unknown to this ledger, so it cannot sign here.`,
+        )
+        setStatus('error')
+        return
+      }
+
       setIdentity(id)
       setCurrent(detail)
       setStatus('connected')

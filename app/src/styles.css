@@ -101,7 +101,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .nav a:hover { color: var(--bone); }
 .nav a[aria-current='page'] { color: var(--bone); border-bottom-color: var(--signal); }
-.topbar-status { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+.topbar-status { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+/* One chip per participant, so the bar has to give before the page does. */
+.topbar-status .chip { white-space: nowrap; }
+@media (max-width: 1280px) {
+  .topbar-status .ledger-offset { display: none; }
+}
 @media (max-width: 900px) {
   .topbar-inner { flex-wrap: wrap; height: auto; gap: 0 16px; padding-block: 12px 0; }
   .nav { order: 3; width: 100%; overflow-x: auto; gap: 22px; height: 44px; }
@@ -294,7 +299,10 @@ code, pre { font-family: var(--font-data); }
 .section-note { font: 400 12.5px/1.7 var(--font-data); color: var(--bone-3); max-width: 440px; margin: 0; }
 @media (max-width: 900px) { .section { padding-block: 56px; } }
 
-.scroll-x { overflow-x: auto; }
+/* min-width:0 so a wide table scrolls inside this rather than pushing the
+   page sideways: an overflow container still stretches to its content without
+   it. */
+.scroll-x { overflow-x: auto; min-width: 0; max-width: 100%; }
 .grid-table { width: 100%; border-collapse: collapse; font: 400 13.5px var(--font-data); }
 .grid-table th {
   text-align: left; font: 400 10.5px var(--font-id); letter-spacing: 0.16em; text-transform: uppercase;
