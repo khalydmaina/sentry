@@ -1,4 +1,4 @@
-import { NODES, NODE_NAME } from '../ledger/api'
+import { NODES, NODE_NAME, NODE_PORT } from '../ledger/api'
 import { useLedger } from '../ledger/LedgerContext'
 import { useWallet } from '../ledger/WalletContext'
 import type { Route } from '../App'
@@ -12,6 +12,7 @@ const LINKS: Array<{ route: Route; label: string }> = [
 
 export function TopBar({ route }: { route: Route }) {
   const { status, offsets } = useLedger()
+  const reachable = NODES.filter((n) => offsets[n] !== null).length
   return (
     <header className="topbar">
       <div className="shell topbar-inner">
@@ -26,15 +27,15 @@ export function TopBar({ route }: { route: Route }) {
           ))}
         </nav>
         <div className="topbar-status">
-          {/* One chip per participant. Their offsets advance independently, so
-              showing a single number would imply one shared ledger. */}
-          {status === 'ready' &&
-            NODES.map((n) => (
-              <span key={n} className="chip quiet" title={`Canton participant ${NODE_NAME[n]}, JSON Ledger API`}>
-                <span className="blink" style={{ animation: 'none' }} aria-hidden /> {NODE_NAME[n]}
-                <span className="ledger-offset">· {offsets[n] === null ? 'unreachable' : `offset ${offsets[n]}`}</span>
-              </span>
-            ))}
+          {/* One chip for the whole network. Which node is at which offset is
+              diagnostic detail, and the privacy page already shows it per node
+              where it carries an argument. */}
+          {status === 'ready' && (
+            <span className="chip quiet" title={NODES.map((n) => `${NODE_NAME[n]} :${NODE_PORT[n]} · ${offsets[n] === null ? 'unreachable' : `offset ${offsets[n]}`}`).join('\n')}>
+              <span className="blink" style={{ animation: 'none' }} aria-hidden />
+              {reachable} {reachable === 1 ? 'node' : 'nodes'}
+            </span>
+          )}
           {status === 'connecting' && (
             <span className="chip flight">
               <span className="blink" aria-hidden /> Connecting
@@ -64,9 +65,12 @@ function WalletChip() {
 
   if (status === 'connected' && identity) {
     return (
-      <button className="chip quiet" onClick={() => void disconnect()} title={`${identity.partyId}\nClick to disconnect`}>
+      <button
+        className="chip quiet"
+        onClick={() => void disconnect()}
+        title={`${identity.partyId}\n${identity.kind === 'wallet' ? identity.wallet : 'demo user'}\nClick to disconnect`}
+      >
         <span className="blink" style={{ animation: 'none' }} aria-hidden /> {identity.label}
-        <span className="ledger-offset">· {identity.kind === 'wallet' ? identity.wallet : 'demo user'}</span>
       </button>
     )
   }
@@ -77,17 +81,24 @@ function WalletChip() {
       </span>
     )
   }
-  if (status === 'error') return <span className="chip refused" title={error ?? undefined}>{error ?? 'Wallet refused'}</span>
+  // The reason can be a sentence. The chip gets the gist, the title gets it all.
+  if (status === 'error') {
+    return (
+      <span className="chip refused" title={error ?? undefined}>
+        {error && error.length > 28 ? 'Wallet unusable here' : (error ?? 'Wallet refused')}
+      </span>
+    )
+  }
   if (providers.length) {
     return (
-      <button className="btn small" onClick={() => void connect(providers[0])}>
-        Connect {providers.length === 1 ? providers[0].info.name : 'wallet'}
+      <button className="btn small" onClick={() => void connect(providers[0])} title={providers.map((p) => p.info.name).join(', ')}>
+        Connect wallet
       </button>
     )
   }
   return (
-    <span className="chip quiet" title="No CIP-0103 wallet announced itself. The demo runs as the sandbox users.">
-      Demo users · no wallet
+    <span className="chip quiet" title="No CIP-0103 wallet announced itself. The demo runs as this ledger's own users.">
+      No wallet
     </span>
   )
 }
