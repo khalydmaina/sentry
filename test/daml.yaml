@@ -8,3 +8,8 @@ dependencies:
   - daml-script
 data-dependencies:
   - ../main/.daml/dist/sentry-0.1.0.dar
+  # Shared control over clearing a held request.
+  - ../governance/.daml/dist/sentry-governance-0.1.0.dar
+  - ../governance/vendor/governance-action-v1-0.1.0.dar
+  - ../governance/vendor/governance-core-v1-0.1.0.dar
+  - ../governance/vendor/splice-util-0.1.4.dar

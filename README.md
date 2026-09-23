@@ -27,6 +27,7 @@ test/daml/Test/Fixture.daml     Shared setup and helpers for the tests
 test/daml/Setup.daml            Party allocation per participant, and demoSetup (plus a wallet)
 app/                            React frontend over the JSON Ledger API
 agent/sentry-agent.mjs          The agent as a program, outside the browser
+governance/                     Clearing a held request under shared control
 scripts/two-node.conf           The second Canton participant
 scripts/ledger.sh               Both participants, package upload, demo parties
 scripts/mutants.sh              Breaks the policy rules on purpose, checks the tests notice
@@ -67,6 +68,37 @@ Pages:
 - **Contract**: the Daml source, imported at build time.
 
 The frontend never simulates. When the JSON API is down it says so and reconnects when the ledger comes back.
+
+## Shared control over the held queue
+
+One owner clearing a held request is right for one person and wrong for a
+treasury, where releasing funds above a threshold should take more than one
+signature. `governance/` puts that release behind BitSafe's
+[Decentralization Manager](https://github.com/DLC-link/decentralization-manager):
+the owner party becomes a governance party with members and a confirmation
+threshold, and `GovernedApproval` is the domain action its `GovernanceRules`
+executes once enough members have confirmed.
+
+Nothing in Sentry counts confirmations or checks the threshold, in the same
+way that nothing in the agent's client checks a spending cap. Both decisions
+belong to a contract the proposer does not control.
+
+```
+testBelowThresholdCannotRelease   one of two confirmations: funds stay put
+testThresholdReleases             two of two: 120.00 settles, recorded OwnerApproved
+testDuplicateConfirmerRejected    the same member twice is one opinion twice
+testNonMemberCannotConfirm        the agent cannot confirm its own request
+testGovernedRejectionNeedsThreshold  refusing is governed too
+testSingleMemberStillWorks        threshold of one is the old behaviour
+```
+
+Members are deliberately not observers on the governance contracts. Each
+member hosts the governance party on its own participant and reads as it, so
+visibility is a topology concern rather than something modelled in the
+contract. The tests express that with `actAs member <> readAs owner`.
+
+The vendored DARs in `governance/vendor/` are built from Decentralization
+Manager at Apache-2.0, with the licence alongside them.
 
 ## The agent, outside the browser
 
