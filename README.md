@@ -26,6 +26,7 @@ test/daml/Test/Wallet.daml      Daml Script tests, one per branch
 test/daml/Test/Fixture.daml     Shared setup and helpers for the tests
 test/daml/Setup.daml            Party allocation per participant, and demoSetup (plus a wallet)
 app/                            React frontend over the JSON Ledger API
+agent/sentry-agent.mjs          The agent as a program, outside the browser
 scripts/two-node.conf           The second Canton participant
 scripts/ledger.sh               Both participants, package upload, demo parties
 ```
@@ -65,6 +66,46 @@ Pages:
 - **Contract**: the Daml source, imported at build time.
 
 The frontend never simulates. When the JSON API is down it says so and reconnects when the ledger comes back.
+
+## The agent, outside the browser
+
+The desk shows both seats in one page, which is convenient and misleading: a
+real agent runs somewhere you do not control. `agent/sentry-agent.mjs` is that
+agent, with its own credential and no dependencies beyond Node.
+
+```sh
+node agent/sentry-agent.mjs status
+node agent/sentry-agent.mjs request --amount 40 --to merchant --memo "api credits"
+node agent/sentry-agent.mjs probe
+```
+
+`request` prints what the ledger decided, not what the script decided:
+
+```
+EXECUTED   40.00 to Merchant     (AutoApproved)
+HELD      120.00 to Merchant     waiting on the owner: above auto-approve threshold, owner sign-off required
+HELD       10.00 to Stranger     waiting on the owner: counterparty not allowlisted
+REJECTED 5000.00 to Merchant     insufficient balance
+```
+
+`probe` is the claim worth checking. It sends four commands the agent is
+perfectly free to send, and shows the ledger refusing each one:
+
+```
+REFUSED    move the holding directly      DAML_AUTHORIZATION_ERROR
+REFUSED    spend as the owner             DAML_AUTHORIZATION_ERROR
+REFUSED    raise its own caps             DAML_AUTHORIZATION_ERROR
+REFUSED    mint itself a holding          DAML_AUTHORIZATION_ERROR
+```
+
+The balance is unchanged afterwards. Nothing in the script enforces this:
+delete every check in it and the agent still cannot do any of those things,
+because the contracts give it exactly one choice.
+
+Configure with `SENTRY_WALLET_API`, `SENTRY_COUNTERPARTY_API`,
+`SENTRY_AGENT_USER` and `SENTRY_AGENT_TOKEN`. On the local sandbox the
+participant requires no token, so the credential is not yet the thing keeping
+the agent honest; the contract is.
 
 ## Build and test the contracts
 
