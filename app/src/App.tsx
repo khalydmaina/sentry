@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { TopBar } from './components/TopBar'
 import { LedgerProvider } from './ledger/LedgerContext'
+import { WalletProvider } from './ledger/WalletContext'
 import { Contract } from './pages/Contract'
 import { Desk } from './pages/Desk'
 import { Landing } from './pages/Landing'
@@ -26,13 +27,15 @@ export function App() {
 
   return (
     <LedgerProvider>
-      <TopBar route={route} />
-      <main>
-        {route === 'landing' && <Landing />}
-        {route === 'desk' && <Desk />}
-        {route === 'privacy' && <Privacy />}
-        {route === 'contract' && <Contract />}
-      </main>
+      <WalletProvider>
+        <TopBar route={route} />
+        <main>
+          {route === 'landing' && <Landing />}
+          {route === 'desk' && <Desk />}
+          {route === 'privacy' && <Privacy />}
+          {route === 'contract' && <Contract />}
+        </main>
+      </WalletProvider>
     </LedgerProvider>
   )
 }

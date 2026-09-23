@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AmountField, Button, Micro, PartyToken } from '../../components/ui'
 import { useLedger } from '../../ledger/LedgerContext'
+import { useWallet } from '../../ledger/WalletContext'
 import { approve, ownerTransfer, reject, updatePolicy, type Parties, type Policy, type Role } from '../../ledger/sentry'
 import { amount, clock } from '../../lib/format'
 import { LedgerTable } from './LedgerTable'
@@ -8,6 +9,7 @@ import { COUNTERPARTY_ROLES, NoticeBanner, parseAmount, SeatHead, WINDOWS, type 
 
 export function OwnerSeat({ policy, onOutcome }: { policy: Policy; onOutcome: (n: Notice) => void }) {
   const { parties, owner, refresh, roleOf } = useLedger()
+  const { identity } = useWallet()
   const [drawer, setDrawer] = useState<'edit' | 'pay' | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
@@ -108,7 +110,7 @@ export function OwnerSeat({ policy, onOutcome }: { policy: Policy; onOutcome: (n
                         disabled={Boolean(busy)}
                         onClick={() =>
                           act(`approve:${p.cid}`, async () => {
-                            const o = await approve(parties, p.cid)
+                            const o = await approve(parties, p.cid, identity?.submit)
                             return o ? { kind: 'outcome', outcome: o, actor: 'owner' } : { kind: 'text', tone: 'info', title: 'Submitted.' }
                           })
                         }
@@ -122,7 +124,7 @@ export function OwnerSeat({ policy, onOutcome }: { policy: Policy; onOutcome: (n
                         disabled={Boolean(busy)}
                         onClick={() =>
                           act(`reject:${p.cid}`, async () => {
-                            const o = await reject(parties, p.cid)
+                            const o = await reject(parties, p.cid, identity?.submit)
                             return o ? { kind: 'outcome', outcome: o, actor: 'owner' } : { kind: 'text', tone: 'info', title: 'Submitted.' }
                           })
                         }
@@ -150,6 +152,7 @@ export function OwnerSeat({ policy, onOutcome }: { policy: Policy; onOutcome: (n
 
 function EditPolicy({ policy, onDone }: { policy: Policy; onDone: (n: Notice) => void }) {
   const { parties, roleOf } = useLedger()
+  const { identity } = useWallet()
   const [perTx, setPerTx] = useState(policy.perTxCap.toFixed(2))
   const [daily, setDaily] = useState(policy.dailyCap.toFixed(2))
   const [threshold, setThreshold] = useState(policy.autoApproveThreshold.toFixed(2))
@@ -169,7 +172,7 @@ function EditPolicy({ policy, onDone }: { policy: Policy; onDone: (n: Notice) =>
     setBusy(true)
     setNotice(null)
     try {
-      await updatePolicy(parties!, { perTxCap: v.perTx!, dailyCap: v.daily!, autoApproveThreshold: v.threshold!, windowMs, allowed })
+      await updatePolicy(parties!, { perTxCap: v.perTx!, dailyCap: v.daily!, autoApproveThreshold: v.threshold!, windowMs, allowed }, identity?.submit)
       onDone({ kind: 'text', tone: 'allow', title: 'Policy updated.', body: 'UpdatePolicy replaced the WalletPolicy contract. The rolling window history carries over.' })
     } catch (error) {
       setNotice({ kind: 'error', error })

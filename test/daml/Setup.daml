@@ -30,8 +30,24 @@ createDemoUsers roles = forA_ roles \(name, party) -> do
   userId <- validateUserId name
   createUser (User userId (Some party)) [CanActAs party]
 
+-- | Parties hosted by the wallet node. Run against that participant only.
+walletParties : Script ()
+walletParties = do
+  [owner, agent] <- mapA allocateParty ["Owner", "Agent"]
+  createDemoUsers [("owner", owner), ("agent", agent)]
+
+-- | Parties hosted by the counterparty node: the issuer, the counterparties and
+-- a party with no role at all. Run against that participant only.
+counterpartyParties : Script ()
+counterpartyParties = do
+  [bank, merchant, stranger, outsider] <-
+    mapA allocateParty ["Bank", "Merchant", "Stranger", "Outsider"]
+  createDemoUsers
+    [("bank", bank), ("merchant", merchant), ("stranger", stranger), ("outsider", outsider)]
+
 -- | Run once against a fresh sandbox. Parties and users only: the frontend
--- mints the holding and creates the policy.
+-- mints the holding and creates the policy. Single-node setup, kept for
+-- running the contracts without the two-participant topology.
 demoParties : Script DemoParties
 demoParties = do
   [bank, owner, agent, merchant, stranger, outsider] <-

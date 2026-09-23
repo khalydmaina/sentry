@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AmountField, Button, Chip, Micro, PartyToken } from '../../components/ui'
 import { useLedger } from '../../ledger/LedgerContext'
+import { useWallet } from '../../ledger/WalletContext'
 import { mintHolding, signPolicy, type Role } from '../../ledger/sentry'
 import { COUNTERPARTY_ROLES, NoticeBanner, parseAmount, WINDOWS, type Notice } from './shared'
 
@@ -8,6 +9,8 @@ type Step = 'idle' | 'flight' | 'done'
 
 export function CreateWallet() {
   const { parties, refresh } = useLedger()
+  // A connected wallet signs the policy itself; otherwise the sandbox's demo user does.
+  const { identity } = useWallet()
   const [balance, setBalance] = useState('1000.00')
   const [perTx, setPerTx] = useState('200.00')
   const [daily, setDaily] = useState('300.00')
@@ -31,14 +34,19 @@ export function CreateWallet() {
       setSteps(['flight', 'idle'])
       const holding = await mintHolding(parties, values.balance!)
       setSteps(['done', 'flight'])
-      await signPolicy(parties, holding, {
-        startingBalance: values.balance!,
-        perTxCap: values.perTx!,
-        dailyCap: values.daily!,
-        autoApproveThreshold: values.threshold!,
-        windowMs,
-        allowed: allowed.map((r) => parties[r]),
-      })
+      await signPolicy(
+        parties,
+        holding,
+        {
+          startingBalance: values.balance!,
+          perTxCap: values.perTx!,
+          dailyCap: values.daily!,
+          autoApproveThreshold: values.threshold!,
+          windowMs,
+          allowed: allowed.map((r) => parties[r]),
+        },
+        identity?.submit,
+      )
       setSteps(['done', 'done'])
       await refresh()
     } catch (e) {

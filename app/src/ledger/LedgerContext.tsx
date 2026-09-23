@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { ledgerEnd, LedgerError } from './api'
+import { ledgerEnd, LedgerError, NODES, type Node } from './api'
 import { loadParties, loadView, ROLES, walletPolicy, type Parties, type Policy, type Role, type View } from './sentry'
 
 export type LedgerStatus = 'connecting' | 'offline' | 'no-parties' | 'ready'
@@ -7,13 +7,18 @@ export type LedgerStatus = 'connecting' | 'offline' | 'no-parties' | 'ready'
 interface LedgerState {
   status: LedgerStatus
   parties: Parties | null
+  /** The wallet node's offset. Kept for pages that only read that node. */
   offset: number | null
+  /** Every participant's own offset. They advance independently. */
+  offsets: Record<Node, number | null>
   owner: View | null
   agent: View | null
   policy: Policy | null
   roleOf: (party: string) => Role | null
   refresh: () => Promise<void>
 }
+
+const NO_OFFSETS = Object.fromEntries(NODES.map((n) => [n, null])) as Record<Node, number | null>
 
 const Ctx = createContext<LedgerState | null>(null)
 const POLL_MS = 1000
@@ -22,6 +27,7 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<LedgerStatus>('connecting')
   const [parties, setParties] = useState<Parties | null>(null)
   const [offset, setOffset] = useState<number | null>(null)
+  const [offsets, setOffsets] = useState<Record<Node, number | null>>(NO_OFFSETS)
   const [owner, setOwner] = useState<View | null>(null)
   const [agent, setAgent] = useState<View | null>(null)
   const seen = useRef<number | null>(null)
@@ -32,7 +38,13 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
     if (inFlight.current && !force) return
     inFlight.current = true
     try {
-      const end = await ledgerEnd()
+      // Every participant is asked for its own end. The wallet node decides
+      // whether we are connected at all; a counterparty node that is down
+      // shows as a missing offset rather than taking the whole page offline.
+      const ends = await Promise.all(NODES.map(async (n) => [n, await ledgerEnd(n).catch(() => null)] as const))
+      setOffsets(Object.fromEntries(ends) as Record<Node, number | null>)
+      const end = ends.find(([n]) => n === 'wallet')?.[1]
+      if (end === null || end === undefined) throw new LedgerError(0, 'LEDGER_UNREACHABLE', 'The wallet node did not answer.')
       let p = partiesRef.current
       if (!p) {
         try {
@@ -57,6 +69,7 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
       setStatus('ready')
     } catch {
       setStatus('offline')
+      setOffsets(NO_OFFSETS)
       partiesRef.current = null
       seen.current = null
     } finally {
@@ -78,7 +91,7 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   const policy = owner && parties ? walletPolicy(owner, parties) : null
 
   return (
-    <Ctx.Provider value={{ status, parties, offset, owner, agent, policy, roleOf, refresh: () => tick(true) }}>
+    <Ctx.Provider value={{ status, parties, offset, offsets, owner, agent, policy, roleOf, refresh: () => tick(true) }}>
       {children}
     </Ctx.Provider>
   )
