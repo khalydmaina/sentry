@@ -62,7 +62,7 @@ export function OwnerSeat({ policy, onOutcome }: { policy: Policy; onOutcome: (n
           parties={parties}
           onSubmit={(to, qty, memo) =>
             act('pay', async () => {
-              const o = await ownerTransfer(parties, to, qty, memo)
+              const o = await ownerTransfer(parties, to, qty, memo, identity?.submit, ownerParty ?? undefined)
               setDrawer(null)
               return o ? { kind: 'outcome', outcome: o, actor: 'owner' } : { kind: 'text', tone: 'info', title: 'Submitted.' }
             })

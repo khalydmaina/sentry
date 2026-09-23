@@ -197,10 +197,13 @@ async function execute(provider: Provider, command: Command, extra?: Partial<Com
     const e = asWalletError(err)
     if (!e.unsupported) throw e
   }
-  await provider.request({ method: 'prepareExecute', params })
+  // Deliberately no fallback to prepareExecute. It resolves with nothing and
+  // reports the result out of band, so there is no way to tie the answer back
+  // to this command. Submitting and then failing to read it back would move
+  // funds and report an error, which is worse than refusing up front.
   throw new WalletError(
     METHOD_UNSUPPORTED,
-    'This wallet only supports prepareExecute, which reports results out of band. Sentry needs prepareExecuteAndWait.',
+    'This wallet does not support prepareExecuteAndWait. Sentry will not submit a command it cannot confirm.',
   )
 }
 

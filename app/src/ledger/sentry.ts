@@ -334,7 +334,9 @@ export async function reject(parties: Parties, pendingCid: string, sign: Signer 
 
 export async function updatePolicy(parties: Parties, changes: Omit<WalletTerms, 'startingBalance'>, sign: Signer = asOwner(parties), ownerParty: OwnerParty = parties.owner) {
   const policy = await freshPolicy(parties, ownerParty)
-  await sign({
+  const disclosed = await disclose(sign, ownerParty, [policy.cid, policy.holding])
+  await sign(
+    {
     ExerciseCommand: {
       templateId: TEMPLATES.policy,
       contractId: policy.cid,
@@ -348,14 +350,25 @@ export async function updatePolicy(parties: Parties, changes: Omit<WalletTerms, 
         newWindowLength: micros(changes.windowMs),
       },
     },
-  })
+    },
+    disclosed,
+  )
 }
 
-export async function ownerTransfer(parties: Parties, to: string, qty: number, memo: string) {
-  const policy = await freshPolicy(parties)
-  const tx = await submit('owner', parties.owner, {
-    ExerciseCommand: { templateId: TEMPLATES.policy, contractId: policy.cid, choice: 'OwnerTransfer', choiceArgument: { to, qty: decimal(qty), memo } },
-  })
+export async function ownerTransfer(
+  parties: Parties,
+  to: string,
+  qty: number,
+  memo: string,
+  sign: Signer = asOwner(parties),
+  ownerParty: OwnerParty = parties.owner,
+) {
+  const policy = await freshPolicy(parties, ownerParty)
+  const disclosed = await disclose(sign, ownerParty, [policy.cid, policy.holding])
+  const tx = await sign(
+    { ExerciseCommand: { templateId: TEMPLATES.policy, contractId: policy.cid, choice: 'OwnerTransfer', choiceArgument: { to, qty: decimal(qty), memo } } },
+    disclosed,
+  )
   return outcomeOf(tx)
 }
 
