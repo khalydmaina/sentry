@@ -149,7 +149,7 @@ export async function connectWallet(detail: ProviderDetail): Promise<Identity> {
       wallet: info.name,
       partyId: account.partyId,
       label: account.hint ?? account.partyId.split('::')[0],
-      submit: walletSigner(provider),
+      submit: walletSigner(provider, account.partyId),
     }
   } catch (err) {
     throw asWalletError(err)
@@ -168,12 +168,12 @@ interface CommandEnvelope {
 
 
 /** Signs and submits through a wallet, then reads the result back. */
-function walletSigner(provider: Provider): Signer {
+function walletSigner(provider: Provider, party: string): Signer {
   // A wallet does not hand back a ledger transaction. It returns the update id
   // of what it submitted, so the events are read back through its own reader.
   const sign: Signer = async (command, disclosed) => {
     const updateId = await execute(provider, command, disclosed?.length ? { disclosedContracts: disclosed } : undefined)
-    return readUpdate(provider, updateId)
+    return readUpdate(provider, updateId, party)
   }
   sign.needsDisclosure = true
   return sign
@@ -213,34 +213,49 @@ async function execute(provider: Provider, command: Command, extra?: Partial<Com
  * which is enough: every command Sentry sends through a wallet is one the
  * connected party is a stakeholder on.
  */
-async function readUpdate(provider: Provider, updateId: string): Promise<Transaction> {
-  // CIP-0103 names `ledgerApi` and its allowed paths but does not pin down the
-  // request envelope, and neither does Grofty's guide. Rather than bet on one
-  // spelling, try the plausible ones and accept any response shape that
-  // carries a transaction. Whichever a wallet implements, one of these fits.
-  const body = { updateId, updateFormat: { includeTransactions: { transactionShape: 'TRANSACTION_SHAPE_ACS_DELTA' } } }
-  const attempts: unknown[] = [
-    { path: '/v2/updates/update-by-id', method: 'POST', body },
-    { path: '/v2/updates/update-by-id', body },
-    { method: 'POST', url: '/v2/updates/update-by-id', body },
-    { path: '/v2/updates/update-by-id', method: 'POST', params: body },
-    body,
-  ]
+async function readUpdate(provider: Provider, updateId: string, party: string): Promise<Transaction> {
+  // The CIP-0103 envelope is { requestMethod, resource, body }, and the body is
+  // not a CIP-0103 type: it is the JSON Ledger API request for that path, here
+  // JsGetUpdateByIdRequest.
+  //
+  // LEDGER_EFFECTS rather than ACS_DELTA, because ACS_DELTA carries only
+  // creates and archives, so an exercise that creates nothing comes back as an
+  // empty transaction. Blobs are left out: they are only needed to disclose
+  // contracts onward, and they make the response much larger.
+  //
+  // The read is scoped to the connected party, so the filter names that party
+  // and no other.
+  const params = {
+    requestMethod: 'post',
+    resource: '/v2/updates/update-by-id',
+    body: {
+      updateId,
+      updateFormat: {
+        includeTransactions: {
+          eventFormat: {
+            filtersByParty: { [party]: { cumulative: [{ identifierFilter: { WildcardFilter: { value: { includeCreatedEventBlob: false } } } }] } },
+            verbose: true,
+          },
+          transactionShape: 'TRANSACTION_SHAPE_LEDGER_EFFECTS',
+        },
+      },
+    },
+  }
 
+  // The read can outrun the update becoming visible, so retry briefly before
+  // treating an empty answer as a failure.
   let last: WalletError | null = null
-  for (const params of attempts) {
-    let r: unknown
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (attempt) await new Promise((r) => setTimeout(r, 200 * attempt))
     try {
-      r = await provider.request({ method: 'ledgerApi', params })
+      const tx = pickTransaction(await provider.request({ method: 'ledgerApi', params }))
+      if (tx) return tx
     } catch (err) {
       const e = asWalletError(err)
-      // A refusal from the user or the ledger is an answer; stop asking.
+      // A refusal from the user or the ledger is an answer, not a race.
       if (!e.unsupported && e.code !== INVALID_PARAMS) throw e
       last = e
-      continue
     }
-    const tx = pickTransaction(r)
-    if (tx) return tx
   }
   throw new WalletError(
     INTERNAL_ERROR,
@@ -248,7 +263,11 @@ async function readUpdate(provider: Provider, updateId: string): Promise<Transac
   )
 }
 
-/** Digs a transaction out of whichever envelope a wallet answers with. */
+/**
+ * Digs a transaction out of whichever envelope a wallet answers with. The
+ * wrapper differs between ledger versions, so this traverses rather than
+ * assuming one nesting of keys.
+ */
 function pickTransaction(r: unknown): Transaction | null {
   const o = r as {
     transaction?: Transaction

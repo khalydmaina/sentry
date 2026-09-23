@@ -84,14 +84,32 @@ export function installMockWallet(): void {
           await new Promise((r) => setTimeout(r, APPROVAL_MS))
           const tx = await submitAsUser('founder', me, command!)
           submitted.set(tx.updateId, tx)
-          return { tx: { payload: { updateId: tx.updateId } } }
+          // The real provider also carries completionOffset on the payload.
+          return { tx: { payload: { updateId: tx.updateId, completionOffset: 0 } } }
         }
 
         case 'ledgerApi': {
-          await whoami()
-          const { path, body } = (params ?? {}) as { path?: string; body?: { updateId?: string } }
-          switch (path) {
+          const me = await whoami()
+          // The documented envelope: { requestMethod, resource, body }. Anything
+          // else is rejected so the app cannot drift back to a guessed shape.
+          const { requestMethod, resource, body } = (params ?? {}) as {
+            requestMethod?: string
+            resource?: string
+            body?: { updateId?: string; updateFormat?: Record<string, unknown> }
+          }
+          if (requestMethod !== undefined && requestMethod !== requestMethod.toLowerCase()) {
+            fail(INVALID_PARAMS, 'requestMethod is lowercase, per CIP-0103.')
+          }
+          if (!resource) fail(INVALID_PARAMS, 'ledgerApi needs a resource, not a path.')
+          switch (resource) {
             case '/v2/updates/update-by-id': {
+              // The reader is scoped to the connected party, so a filter naming
+              // anyone else is refused rather than quietly honoured.
+              const shape = (body?.updateFormat as { includeTransactions?: { eventFormat?: { filtersByParty?: Record<string, unknown> } } } | undefined)
+                ?.includeTransactions
+              const parties = Object.keys(shape?.eventFormat?.filtersByParty ?? {})
+              if (!parties.length) fail(INVALID_PARAMS, 'updateFormat.includeTransactions.eventFormat.filtersByParty is required.')
+              if (parties.some((p) => p !== me)) fail(INVALID_PARAMS, 'ledgerApi reads are scoped to the connected party.')
               const id = body?.updateId
               const tx = id ? submitted.get(id) : undefined
               if (!tx) fail(METHOD_UNSUPPORTED, `No update ${id} readable by this party.`)
@@ -101,7 +119,7 @@ export function installMockWallet(): void {
               return { offset: await ledgerEnd() }
             default:
               // The real reader serves a short allowlist and nothing else.
-              return fail(METHOD_UNSUPPORTED, `ledgerApi does not serve ${path}.`)
+              return fail(METHOD_UNSUPPORTED, `ledgerApi does not serve ${resource}.`)
           }
         }
 
