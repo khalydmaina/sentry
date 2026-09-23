@@ -24,9 +24,10 @@ main/daml/Wallet/Policy.daml    WalletPolicy (RequestTransfer, OwnerTransfer, Up
 main/daml/Wallet/Records.daml   ExecutedTransfer, RejectedTransfer records
 test/daml/Test/Wallet.daml      Daml Script tests, one per branch
 test/daml/Test/Fixture.daml     Shared setup and helpers for the tests
-test/daml/Setup.daml            demoParties (parties and users) and demoSetup (plus a wallet)
+test/daml/Setup.daml            Party allocation per participant, and demoSetup (plus a wallet)
 app/                            React frontend over the JSON Ledger API
-scripts/ledger.sh               Fresh sandbox, package upload, demo parties
+scripts/two-node.conf           The second Canton participant
+scripts/ledger.sh               Both participants, package upload, demo parties
 ```
 
 `main` is the package deployed to the ledger. `test` holds scripts only, so `daml-script` never ships.
@@ -40,16 +41,25 @@ scripts/ledger.sh               Fresh sandbox, package upload, demo parties
 ## Run the demo
 
 ```sh
-./scripts/ledger.sh             # terminal 1: sandbox on 6865, JSON API on 6864
+./scripts/ledger.sh             # terminal 1: two participants, JSON APIs on 6864 and 7864
 cd app && npm install && npm run dev   # terminal 2: http://localhost:5173
 ```
 
-The ledger script builds the Daml, starts a fresh in-memory sandbox, uploads `sentry-0.1.0.dar` and creates six parties with a ledger user each: bank, owner, agent, merchant, stranger, outsider. The desk then walks through creating the wallet: Bank mints the holding and the owner signs the policy. Ctrl-C the script to throw the ledger away.
+The ledger script builds the Daml, starts **two Canton participants on one synchronizer**, uploads `sentry-0.1.0.dar` to both, and allocates each party on the node that hosts it:
+
+| Participant | JSON API | Parties |
+| --- | --- | --- |
+| `sandbox` | 6864 | owner, agent |
+| `pebblebox` | 7864 | bank, merchant, stranger, outsider |
+
+Two nodes is the point. The privacy page asks each participant what it holds, so "the bank cannot see the policy" is a fact about a separate node rather than a filter applied to one node's answer. The desk then walks through creating the wallet: the bank mints the holding on its own node and the owner signs the policy on theirs. Ctrl-C the script to throw both ledgers away.
+
+The first transaction across the two participants takes noticeably longer than the rest while the nodes exchange topology. Later ones settle in well under a second.
 
 Pages:
 
 - **Desk**: the owner seat (held queue, ledger, policy edits, direct payments) and the agent seat (requests, scenarios, a two-at-once race, and bypass attempts that submit forbidden commands so the ledger's refusal is shown).
-- **Privacy**: an active-contracts query as each of the six parties at the same offset.
+- **Privacy**: an active-contracts query put to each participant, as each party it hosts, at that node's own offset.
 - **Contract**: the Daml source, imported at build time.
 
 The frontend never simulates. When the JSON API is down it says so and reconnects when the ledger comes back.
@@ -69,6 +79,7 @@ cd test
 dpm script --dar .daml/dist/sentry-test-0.1.0.dar --upload-dar true \
   --all --skip-script-name Test.Wallet:testRollingWindowHasNoBoundaryDoubleSpend \
   --skip-script-name Setup:demoSetup --skip-script-name Setup:demoParties \
+  --skip-script-name Setup:walletParties --skip-script-name Setup:counterpartyParties \
   --ledger-host localhost --ledger-port 6865 --wall-clock-time \
   --json-test-summary summary.json
 ```
@@ -82,4 +93,7 @@ Canton refuses a changed package with a name and version it has already seen (`K
 - Funds sent to the owner land in a second holding the policy does not track.
 - `dailyCap` bounds the total spent in a window, not the number of spends, so many tiny spends grow `recentSpends`.
 - The asset model is self-contained, not wired to Canton Coin or a token standard.
-- All demo parties share one sandbox node, so the privacy page shows the ledger API's per-party view, not separate nodes.
+- The outsider and stranger share the counterparty node with the bank and the merchant, so their empty views are the ledger API's per-party filter. The claim demonstrated across nodes is the bank's and the merchant's: neither participant receives the policy.
+- Both participants run in-memory, so everything is thrown away when the ledger stops.
+- A wallet-connected owner signs with their own party, which owns no holding, so wallet onboarding has no funding path yet.
+- Neither participant requires authentication, which is appropriate for a local demo and not for anything else.

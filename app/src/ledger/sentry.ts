@@ -1,7 +1,8 @@
 // Sentry's contracts as the frontend sees them: decoding, queries and commands.
 // Template and choice names mirror main/daml/Wallet/*.daml exactly.
 
-import { activeContracts, ledgerEnd, LedgerError, submit, userParty, type CreatedEvent, type Transaction } from './api'
+import { activeContracts, disclosureFor, ledgerEnd, LedgerError, submit, userParty, type CreatedEvent, type Node, type Transaction } from './api'
+import type { Signer } from './identity'
 
 export const ROLES = ['owner', 'agent', 'bank', 'merchant', 'stranger', 'outsider'] as const
 export type Role = (typeof ROLES)[number]
@@ -131,14 +132,45 @@ export function decodeView(events: CreatedEvent[]): View {
   return view
 }
 
+/**
+ * Which participant node hosts each role. The wallet node holds the owner and
+ * the agent; every other party is hosted by the counterparty node, so their
+ * contracts arrive over the synchronizer or not at all.
+ */
+export const ROLE_NODE: Record<Role, Node> = {
+  owner: 'wallet',
+  agent: 'wallet',
+  bank: 'counterparty',
+  merchant: 'counterparty',
+  stranger: 'counterparty',
+  outsider: 'counterparty',
+}
+
+export const ROLES_ON: Record<Node, Role[]> = {
+  wallet: ROLES.filter((r) => ROLE_NODE[r] === 'wallet'),
+  counterparty: ROLES.filter((r) => ROLE_NODE[r] === 'counterparty'),
+}
+
 export async function loadParties(): Promise<Parties> {
-  const ids = await Promise.all(ROLES.map((r) => userParty(r)))
+  const ids = await Promise.all(ROLES.map((r) => userParty(r, ROLE_NODE[r])))
   return Object.fromEntries(ROLES.map((r, i) => [r, ids[i]])) as Parties
 }
 
-export async function loadView(party: string, offset?: number): Promise<View> {
-  const at = offset ?? (await ledgerEnd())
-  return decodeView(await activeContracts(party, at))
+export async function loadView(party: string, offset?: number, node: Node = 'wallet'): Promise<View> {
+  const at = offset ?? (await ledgerEnd(node))
+  return decodeView(await activeContracts(party, at, node))
+}
+
+/** Each participant keeps its own offsets, so a node is always asked at its own end. */
+export async function ledgerEndOf(node: Node): Promise<number> {
+  return ledgerEnd(node)
+}
+
+/** Asks a role's own node, at that node's own ledger offset. */
+export async function loadRoleView(role: Role): Promise<View> {
+  const node = ROLE_NODE[role]
+  const party = await userParty(role, node)
+  return loadView(party, await ledgerEnd(node), node)
 }
 
 /** The live policy between the demo owner and agent, newest first if several exist. */
@@ -199,19 +231,45 @@ export interface WalletTerms {
   allowed: string[]
 }
 
+/**
+ * How a command reaches the ledger on the owner's behalf.
+ *
+ * The default sends it as the sandbox's `owner` demo user, which is only
+ * honest on a local ledger with no auth. When a CIP-0103 wallet is connected
+ * the app passes that wallet's submit instead, so the signature is made by a
+ * key this app never holds.
+ */
+const asOwner = (parties: Parties): Signer => (command) => submit('owner', parties.owner, command)
+
+/**
+ * Contracts a command needs the submitting participant to know about.
+ * Only gathered for a signer that says it needs them, since it costs a query
+ * and the local sandbox already holds everything.
+ */
+async function disclose(sign: Signer, party: string, contractIds: Array<string | undefined>) {
+  if (!sign.needsDisclosure) return undefined
+  return disclosureFor(party, contractIds.filter((c): c is string => !!c))
+}
+
 /** Two transactions, two signers: Bank mints the holding, then the owner signs the policy. */
 export async function mintHolding(parties: Parties, amount: number): Promise<string> {
-  const tx = await submit('bank', parties.bank, {
-    CreateCommand: {
-      templateId: TEMPLATES.holding,
-      createArguments: { issuer: parties.bank, owner: parties.owner, agent: parties.agent, amount: decimal(amount) },
+  // The bank is hosted by the counterparty node, so the mint is submitted there.
+  const tx = await submit(
+    'bank',
+    parties.bank,
+    {
+      CreateCommand: {
+        templateId: TEMPLATES.holding,
+        createArguments: { issuer: parties.bank, owner: parties.owner, agent: parties.agent, amount: decimal(amount) },
+      },
     },
-  })
+    ROLE_NODE.bank,
+  )
   return tx.events.find((e) => e.CreatedEvent)!.CreatedEvent!.contractId
 }
 
-export async function signPolicy(parties: Parties, holding: string, terms: WalletTerms): Promise<string> {
-  const tx = await submit('owner', parties.owner, {
+export async function signPolicy(parties: Parties, holding: string, terms: WalletTerms, sign: Signer = asOwner(parties)): Promise<string> {
+  const tx = await sign({
     CreateCommand: {
       templateId: TEMPLATES.policy,
       createArguments: {
@@ -250,24 +308,26 @@ async function freshPolicy(parties: Parties): Promise<Policy> {
 }
 
 /** Looks the policy up immediately before the call: every spend replaces it. */
-export async function approve(parties: Parties, pendingCid: string) {
+export async function approve(parties: Parties, pendingCid: string, sign: Signer = asOwner(parties)) {
   const policy = await freshPolicy(parties)
-  const tx = await submit('owner', parties.owner, {
-    ExerciseCommand: { templateId: TEMPLATES.pending, contractId: pendingCid, choice: 'Approve', choiceArgument: { freshPolicy: policy.cid } },
-  })
+  // Approve reads the policy and its holding, so all three must be disclosed.
+  const disclosed = await disclose(sign, parties.owner, [pendingCid, policy.cid, policy.holding])
+  const tx = await sign(
+    { ExerciseCommand: { templateId: TEMPLATES.pending, contractId: pendingCid, choice: 'Approve', choiceArgument: { freshPolicy: policy.cid } } },
+    disclosed,
+  )
   return outcomeOf(tx)
 }
 
-export async function reject(parties: Parties, pendingCid: string) {
-  const tx = await submit('owner', parties.owner, {
-    ExerciseCommand: { templateId: TEMPLATES.pending, contractId: pendingCid, choice: 'Reject', choiceArgument: {} },
-  })
+export async function reject(parties: Parties, pendingCid: string, sign: Signer = asOwner(parties)) {
+  const disclosed = await disclose(sign, parties.owner, [pendingCid])
+  const tx = await sign({ ExerciseCommand: { templateId: TEMPLATES.pending, contractId: pendingCid, choice: 'Reject', choiceArgument: {} } }, disclosed)
   return outcomeOf(tx)
 }
 
-export async function updatePolicy(parties: Parties, changes: Omit<WalletTerms, 'startingBalance'>) {
+export async function updatePolicy(parties: Parties, changes: Omit<WalletTerms, 'startingBalance'>, sign: Signer = asOwner(parties)) {
   const policy = await freshPolicy(parties)
-  await submit('owner', parties.owner, {
+  await sign({
     ExerciseCommand: {
       templateId: TEMPLATES.policy,
       contractId: policy.cid,
