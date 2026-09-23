@@ -28,7 +28,8 @@ test/daml/Setup.daml            Party allocation per participant, and demoSetup 
 app/                            React frontend over the JSON Ledger API
 agent/sentry-agent.mjs          The agent as a program, outside the browser
 governance/                     Clearing a held request under shared control
-scripts/two-node.conf           The second Canton participant
+scripts/three-node.conf         The two extra Canton participants
+scripts/host-owner.sc           Hosts the owner party on two of them
 scripts/ledger.sh               Both participants, package upload, demo parties
 scripts/mutants.sh              Breaks the policy rules on purpose, checks the tests notice
 ```
@@ -54,6 +55,22 @@ The ledger script builds the Daml, starts **two Canton participants on one synch
 | --- | --- | --- |
 | `sandbox` | 6864 | owner, agent, founder |
 | `pebblebox` | 7864 | bank, merchant, stranger, outsider |
+| `sidebox` | 8864 | a second host for the owner, nobody's counterparty |
+
+The owner party is hosted on `sandbox` and `sidebox`, and deliberately not on
+`pebblebox`. That is what lets one topology show two things at once:
+
+```
+owner, asked of sandbox   (hosts owner): ['WalletHolding', 'WalletPolicy']
+owner, asked of sidebox   (hosts owner): ['WalletHolding', 'WalletPolicy']
+owner, asked of pebblebox (does not)   : ['WalletHolding']
+bank,  asked of pebblebox              : ['WalletHolding']
+```
+
+The owner exists on two independent participants, and the counterparty's node
+still never receives the policy, even when asked about the owner directly. It
+holds the holding because the bank signed it, and nothing else.
+Reproduce with `python3 scripts/hosting-check.py` against a fresh ledger.
 
 `founder` is nobody's demo role. It stands in for a person arriving with their own wallet and their own party, owning nothing, and is the party a connected wallet acts as.
 
