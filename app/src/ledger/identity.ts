@@ -167,14 +167,7 @@ interface CommandEnvelope {
 }
 
 
-/**
- * Submits and returns the update id.
- *
- * `prepareExecuteAndWait` is preferred because it answers directly.
- * `prepareExecute` resolves with nothing and reports the result separately,
- * so it is only a fallback for a wallet that lacks the former, which is
- * reported as -32601 and nothing else.
- */
+/** Signs and submits through a wallet, then reads the result back. */
 function walletSigner(provider: Provider): Signer {
   // A wallet does not hand back a ledger transaction. It returns the update id
   // of what it submitted, so the events are read back through its own reader.
@@ -186,6 +179,12 @@ function walletSigner(provider: Provider): Signer {
   return sign
 }
 
+/**
+ * Submits and returns the update id.
+ *
+ * `prepareExecuteAndWait` is the only shape Sentry accepts: it answers
+ * directly, so the command can be tied to its result.
+ */
 async function execute(provider: Provider, command: Command, extra?: Partial<CommandEnvelope>): Promise<string> {
   const params: CommandEnvelope = { commands: [command], commandId: crypto.randomUUID(), ...extra }
   try {
@@ -215,14 +214,57 @@ async function execute(provider: Provider, command: Command, extra?: Partial<Com
  * connected party is a stakeholder on.
  */
 async function readUpdate(provider: Provider, updateId: string): Promise<Transaction> {
-  const r = (await provider.request({
-    method: 'ledgerApi',
-    params: { path: `/v2/updates/update-by-id`, method: 'POST', body: { updateId, updateFormat: { includeTransactions: { transactionShape: 'TRANSACTION_SHAPE_ACS_DELTA' } } } },
-  })) as { transaction?: Transaction; update?: { Transaction?: { value?: Transaction } } } | undefined
+  // CIP-0103 names `ledgerApi` and its allowed paths but does not pin down the
+  // request envelope, and neither does Grofty's guide. Rather than bet on one
+  // spelling, try the plausible ones and accept any response shape that
+  // carries a transaction. Whichever a wallet implements, one of these fits.
+  const body = { updateId, updateFormat: { includeTransactions: { transactionShape: 'TRANSACTION_SHAPE_ACS_DELTA' } } }
+  const attempts: unknown[] = [
+    { path: '/v2/updates/update-by-id', method: 'POST', body },
+    { path: '/v2/updates/update-by-id', body },
+    { method: 'POST', url: '/v2/updates/update-by-id', body },
+    { path: '/v2/updates/update-by-id', method: 'POST', params: body },
+    body,
+  ]
 
-  const tx = r?.transaction ?? r?.update?.Transaction?.value
-  if (!tx) throw new WalletError(INTERNAL_ERROR, `The wallet submitted update ${updateId} but its events could not be read back.`)
-  return tx
+  let last: WalletError | null = null
+  for (const params of attempts) {
+    let r: unknown
+    try {
+      r = await provider.request({ method: 'ledgerApi', params })
+    } catch (err) {
+      const e = asWalletError(err)
+      // A refusal from the user or the ledger is an answer; stop asking.
+      if (!e.unsupported && e.code !== INVALID_PARAMS) throw e
+      last = e
+      continue
+    }
+    const tx = pickTransaction(r)
+    if (tx) return tx
+  }
+  throw new WalletError(
+    INTERNAL_ERROR,
+    `The wallet submitted update ${updateId} but its events could not be read back${last ? `: ${last.message}` : '.'}`,
+  )
+}
+
+/** Digs a transaction out of whichever envelope a wallet answers with. */
+function pickTransaction(r: unknown): Transaction | null {
+  const o = r as {
+    transaction?: Transaction
+    update?: { Transaction?: { value?: Transaction }; transaction?: Transaction }
+    result?: { transaction?: Transaction }
+    data?: { transaction?: Transaction }
+  } | null
+  const tx =
+    o?.transaction ??
+    o?.update?.Transaction?.value ??
+    o?.update?.transaction ??
+    o?.result?.transaction ??
+    o?.data?.transaction ??
+    null
+  // Only useful if it actually carries events; an id alone tells us nothing.
+  return tx && Array.isArray((tx as Transaction).events) ? (tx as Transaction) : null
 }
 
 export async function disconnectWallet(detail: ProviderDetail): Promise<void> {

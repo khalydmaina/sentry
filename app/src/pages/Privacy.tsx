@@ -3,7 +3,8 @@ import { LedgerGate } from '../components/LedgerGate'
 import { Banner, Micro, PartyToken } from '../components/ui'
 import { NODES, NODE_NAME, NODE_PORT, type Node } from '../ledger/api'
 import { useLedger } from '../ledger/LedgerContext'
-import { loadView, ledgerEndOf, ROLE_NODE, ROLES, ROLES_ON, TEMPLATE_NAMES, templateName, type Role, type View } from '../ledger/sentry'
+import { useWallet } from '../ledger/WalletContext'
+import { loadView, ledgerEndOf, ROLE_NODE, ROLES, TEMPLATE_NAMES, templateName, type Role, type View } from '../ledger/sentry'
 import { partyId } from '../lib/format'
 
 export function Privacy() {
@@ -26,12 +27,33 @@ export function Privacy() {
   )
 }
 
+/** A column on the matrix: one party, asked of the node that hosts it. */
+interface Column {
+  key: string
+  label: string
+  party: string
+  node: Node
+}
+
 function PrivacyBody() {
   const { parties, offset } = useLedger()
-  const [views, setViews] = useState<Record<Role, View> | null>(null)
+  const { identity } = useWallet()
+  const [views, setViews] = useState<Record<string, View> | null>(null)
   const [ends, setEnds] = useState<Record<Node, number> | null>(null)
-  const [left, setLeft] = useState<Role>('owner')
-  const [right, setRight] = useState<Role>('bank')
+  const [left, setLeft] = useState<string>('owner')
+  const [right, setRight] = useState<string>('bank')
+
+  // The demo roster, plus the connected wallet when it is not already one of
+  // the demo roles. A real owner should see their own wallet here, not just
+  // the six the script allocated.
+  const columns: Column[] = [
+    ...ROLES.map((r) => ({ key: r, label: r, party: parties?.[r] ?? '', node: ROLE_NODE[r] })),
+    ...(identity && parties && !ROLES.some((r) => parties[r] === identity.partyId)
+      ? [{ key: 'connected', label: identity.label, party: identity.partyId, node: 'wallet' as Node }]
+      : []),
+  ].filter((c) => c.party)
+
+  const onNode = (n: Node) => columns.filter((c) => c.node === n)
 
   useEffect(() => {
     if (!parties || offset === null) return
@@ -39,15 +61,17 @@ function PrivacyBody() {
     void (async () => {
       // Each node keeps its own offsets, so every node is asked at its own end.
       const at = Object.fromEntries(await Promise.all(NODES.map(async (n) => [n, await ledgerEndOf(n)] as const))) as Record<Node, number>
-      const vs = await Promise.all(ROLES.map((r) => loadView(parties[r], at[ROLE_NODE[r]], ROLE_NODE[r])))
+      const cols = columns
+      const vs = await Promise.all(cols.map((c) => loadView(c.party, at[c.node], c.node)))
       if (!live) return
       setEnds(at)
-      setViews(Object.fromEntries(ROLES.map((r, i) => [r, vs[i]])) as Record<Role, View>)
+      setViews(Object.fromEntries(cols.map((c, i) => [c.key, vs[i]])))
     })()
     return () => {
       live = false
     }
-  }, [parties, offset])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parties, offset, identity?.partyId])
 
   if (!parties || !views || !ends) {
     return (
@@ -57,8 +81,8 @@ function PrivacyBody() {
     )
   }
 
-  const count = (r: Role, t: string) => views[r].raw.filter((e) => templateName(e.templateId) === t).length
-  const policySeenOffWallet = ROLES_ON.counterparty.some((r) => count(r, 'WalletPolicy') > 0)
+  const count = (key: string, t: string) => (views[key]?.raw ?? []).filter((e) => templateName(e.templateId) === t).length
+  const policySeenOffWallet = onNode('counterparty').some((c) => count(c.key, 'WalletPolicy') > 0)
 
   return (
     <>
@@ -74,16 +98,17 @@ function PrivacyBody() {
             <tr>
               <th rowSpan={2}>Template</th>
               {NODES.map((n) => (
-                <th key={n} colSpan={ROLES_ON[n].length} style={{ textAlign: 'center', borderLeft: '1px solid var(--rule)' }}>
+                <th key={n} colSpan={onNode(n).length} style={{ textAlign: 'center', borderLeft: '1px solid var(--rule)' }}>
                   {NODE_NAME[n]} <span style={{ color: 'var(--mute)' }}>:{NODE_PORT[n]} · offset {ends[n]}</span>
                 </th>
               ))}
             </tr>
             <tr>
               {NODES.flatMap((n) =>
-                ROLES_ON[n].map((r, i) => (
-                  <th key={r} style={i === 0 ? { borderLeft: '1px solid var(--rule)' } : undefined}>
-                    {r}
+                onNode(n).map((c, i) => (
+                  <th key={c.key} style={i === 0 ? { borderLeft: '1px solid var(--rule)' } : undefined}>
+                    {c.label}
+                    {c.key === 'connected' && <span style={{ color: 'var(--signal)' }}> ·wallet</span>}
                   </th>
                 )),
               )}
@@ -94,15 +119,15 @@ function PrivacyBody() {
               <tr key={t}>
                 <td style={{ color: 'var(--bone)' }}>{t}</td>
                 {NODES.flatMap((n) =>
-                  ROLES_ON[n].map((r, i) => {
-                    const num = count(r, t)
+                  onNode(n).map((c, i) => {
+                    const num = count(c.key, t)
                     const edge = i === 0 ? { borderLeft: '1px solid var(--rule)' } : undefined
                     return num ? (
-                      <td key={r} className="yes" style={edge}>
+                      <td key={c.key} className="yes" style={edge}>
                         ✓ {num} visible
                       </td>
                     ) : (
-                      <td key={r} className="hatch" style={edge}>
+                      <td key={c.key} className="hatch" style={edge}>
                         no data
                       </td>
                     )
@@ -115,16 +140,19 @@ function PrivacyBody() {
       </div>
 
       <div className="views">
-        <Pane role={left} setRole={setLeft} view={views[left]} party={parties[left]} />
-        <Pane role={right} setRole={setRight} view={views[right]} party={parties[right]} />
+        <Pane sel={left} setSel={setLeft} columns={columns} views={views} />
+        <Pane sel={right} setSel={setRight} columns={columns} views={views} />
       </div>
     </>
   )
 }
 
-function Pane({ role, setRole, view, party }: { role: Role; setRole: (r: Role) => void; view: View; party: string }) {
+function Pane({ sel, setSel, columns, views }: { sel: string; setSel: (k: string) => void; columns: Column[]; views: Record<string, View> }) {
+  const col = columns.find((c) => c.key === sel) ?? columns[0]
+  const view = views[col.key]
+  if (!view) return null
   const empty = view.raw.length === 0
-  const node = ROLE_NODE[role]
+  const role = (ROLES as readonly string[]).includes(col.key) ? (col.key as Role) : 'owner'
   const body = view.raw.map((e) => ({
     template: templateName(e.templateId),
     contractId: `${e.contractId.slice(0, 8)}…`,
@@ -135,25 +163,28 @@ function Pane({ role, setRole, view, party }: { role: Role; setRole: (r: Role) =
   return (
     <div className={`view-pane ${empty ? 'empty-view' : ''}`}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <label className="micro" htmlFor={`pane-${role}`}>
-          Ask {NODE_NAME[node]}:{NODE_PORT[node]} as
+        <label className="micro" htmlFor={`pane-${col.key}`}>
+          Ask {NODE_NAME[col.node]}:{NODE_PORT[col.node]} as
         </label>
-        <select id={`pane-${role}`} className="select" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+        <select id={`pane-${col.key}`} className="select" value={col.key} onChange={(e) => setSel(e.target.value)}>
           {NODES.map((n) => (
             <optgroup key={n} label={`${NODE_NAME[n]} :${NODE_PORT[n]}`}>
-              {ROLES_ON[n].map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
+              {columns
+                .filter((c) => c.node === n)
+                .map((c) => (
+                  <option key={c.key} value={c.key}>
+                    {c.label}
+                    {c.key === 'connected' ? ' (wallet)' : ''}
+                  </option>
+                ))}
             </optgroup>
           ))}
         </select>
       </div>
-      <PartyToken role={role} id={party} />
+      <PartyToken role={role} id={col.party} />
       <pre>{empty ? '[]' : JSON.stringify(body, null, 2)}</pre>
       <span className={empty ? 'micro' : 'micro signal'}>
-        {empty ? `${NODE_NAME[node]} holds no contract data for this party` : `✓ ${view.raw.length} contracts on ${NODE_NAME[node]}`}
+        {empty ? `${NODE_NAME[col.node]} holds no contract data for this party` : `✓ ${view.raw.length} contracts on ${NODE_NAME[col.node]}`}
       </span>
     </div>
   )
