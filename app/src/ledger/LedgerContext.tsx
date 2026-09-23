@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { ledgerEnd, LedgerError, NODES, type Node } from './api'
+import { ledgerEnd, LedgerError, NODES, userParty, type Node } from './api'
 import { loadParties, loadView, ROLES, walletPolicy, type Parties, type Policy, type Role, type View } from './sentry'
 import { useWallet } from './WalletContext'
+import { decodeGovernance, MEMBERS, type GovernanceView, type Member } from './governance'
 
 export type LedgerStatus = 'connecting' | 'offline' | 'no-parties' | 'ready'
 
@@ -21,6 +22,10 @@ interface LedgerState {
   owner: View | null
   agent: View | null
   policy: Policy | null
+  /** Shared control over the held queue, read from the owner's own view. */
+  governance: GovernanceView | null
+  /** The governance members, with the party each one resolved to. */
+  members: Member[]
   roleOf: (party: string) => Role | null
   refresh: () => Promise<void>
 }
@@ -39,9 +44,12 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   const [offsets, setOffsets] = useState<Record<Node, number | null>>(NO_OFFSETS)
   const [owner, setOwner] = useState<View | null>(null)
   const [agent, setAgent] = useState<View | null>(null)
+  const [governance, setGovernance] = useState<GovernanceView | null>(null)
+  const [members, setMembers] = useState<Member[]>([])
   const seen = useRef<number | null>(null)
   const connectedRef = useRef<string | null>(null)
   const ownerRef = useRef<string | null>(null)
+  const membersRef = useRef<Member[]>([])
   const partiesRef = useRef<Parties | null>(null)
   const inFlight = useRef(false)
 
@@ -78,6 +86,20 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
         setOffset(end)
         setOwner(o)
         setAgent(a)
+        // The owner signs the rules, the proposals and every confirmation, so
+        // its own view carries the whole governance picture.
+        setGovernance(decodeGovernance(o.raw))
+      }
+      // Members are resolved once: each lives on the node that hosts it.
+      if (!membersRef.current.length) {
+        const resolved = await Promise.all(
+          MEMBERS.map(async (m) => ({ ...m, party: await userParty(m.role, m.node).catch(() => '') })),
+        )
+        const found = resolved.filter((m) => m.party)
+        if (found.length) {
+          membersRef.current = found
+          setMembers(found)
+        }
       }
       setStatus('ready')
     } catch {
@@ -111,7 +133,7 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   const policy = owner && parties && ownerParty ? walletPolicy(owner, ownerParty, parties.agent) : null
 
   return (
-    <Ctx.Provider value={{ status, parties, offset, offsets, ownerParty, owner, agent, policy, roleOf, refresh: () => tick(true) }}>
+    <Ctx.Provider value={{ status, parties, offset, offsets, ownerParty, owner, agent, policy, governance, members, roleOf, refresh: () => tick(true) }}>
       {children}
     </Ctx.Provider>
   )
