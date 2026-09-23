@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { ledgerEnd, LedgerError, NODES, userParty, type Node } from './api'
+import { HOSTED, ledgerEnd, LedgerError, NODES, userParty, type Node } from './api'
 import { loadParties, loadView, ROLES, walletPolicy, type Parties, type Policy, type Role, type View } from './sentry'
 import { useWallet } from './WalletContext'
 import { decodeGovernance, MEMBERS, type GovernanceView, type Member } from './governance'
@@ -38,7 +38,7 @@ const POLL_MS = 1000
 export function LedgerProvider({ children }: { children: ReactNode }) {
   const { identity } = useWallet()
   const connectedParty = identity?.partyId ?? null
-  const [status, setStatus] = useState<LedgerStatus>('connecting')
+  const [status, setStatus] = useState<LedgerStatus>(HOSTED ? 'offline' : 'connecting')
   const [parties, setParties] = useState<Parties | null>(null)
   const [offset, setOffset] = useState<number | null>(null)
   const [offsets, setOffsets] = useState<Record<Node, number | null>>(NO_OFFSETS)
@@ -114,11 +114,13 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
 
   // Connecting or disconnecting a wallet changes whose wallet is on screen.
   useEffect(() => {
+    if (HOSTED) return
     connectedRef.current = connectedParty
     void tick(true)
   }, [connectedParty, tick])
 
   useEffect(() => {
+    if (HOSTED) return
     void tick()
     const id = setInterval(() => void tick(), POLL_MS)
     return () => clearInterval(id)

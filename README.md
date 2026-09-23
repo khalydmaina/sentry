@@ -48,11 +48,11 @@ scripts/mutants.sh              Breaks the policy rules on purpose, checks the t
 ## Run the demo
 
 ```sh
-./scripts/ledger.sh             # terminal 1: two participants, JSON APIs on 6864 and 7864
+./scripts/ledger.sh             # terminal 1: three participants, JSON APIs on 6864, 7864 and 8864
 cd app && npm install && npm run dev   # terminal 2: http://localhost:5173
 ```
 
-The ledger script builds the Daml, starts **two Canton participants on one synchronizer**, uploads `sentry-0.1.0.dar` to both, and allocates each party on the node that hosts it:
+The ledger script builds the Daml, starts **three Canton participants on one synchronizer**, uploads the Sentry packages to all three, and allocates each party on the node that hosts it:
 
 | Participant | JSON API | Parties |
 | --- | --- | --- |

@@ -1,4 +1,4 @@
-import { NODES, NODE_NAME, NODE_PORT } from '../ledger/api'
+import { HOSTED, NODES, NODE_NAME, NODE_PORT } from '../ledger/api'
 import { useLedger } from '../ledger/LedgerContext'
 import { useWallet } from '../ledger/WalletContext'
 import type { Route } from '../App'
@@ -41,9 +41,11 @@ export function TopBar({ route }: { route: Route }) {
               <span className="blink" aria-hidden /> Connecting
             </span>
           )}
-          {status === 'offline' && <span className="chip refused">Ledger offline</span>}
+          {status === 'offline' &&
+            (HOSTED ? <span className="chip quiet">Ledger runs locally</span> : <span className="chip refused">Ledger offline</span>)}
           {status === 'no-parties' && <span className="chip held">No demo parties</span>}
-          <WalletChip />
+          {/* Hosted, there is no ledger to sign against, so no wallet either. */}
+          {!HOSTED && <WalletChip />}
           {route === 'landing' && (
             <a className="btn primary small" href="#/desk">
               Run the demo
