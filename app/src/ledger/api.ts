@@ -1,5 +1,14 @@
 // Thin client for the Canton JSON Ledger API v2, proxied under /v2 by Vite.
 
+/**
+ * True on a static deployment, where no ledger sits behind /v2. A Canton
+ * participant is a JVM, so the hosted site carries the pages that need no
+ * ledger and says plainly where the rest runs, rather than polling paths that
+ * do not exist. `vite preview` on localhost still counts as local.
+ */
+export const HOSTED =
+  import.meta.env.PROD && typeof window !== 'undefined' && !['localhost', '127.0.0.1'].includes(window.location.hostname)
+
 export interface CreatedEvent {
   contractId: string
   templateId: string

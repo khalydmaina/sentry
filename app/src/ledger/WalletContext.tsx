@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { partyKnown } from './api'
+import { HOSTED, partyKnown } from './api'
 import { connectWallet, disconnectWallet, discoverProviders, WalletError, type Identity, type ProviderDetail } from './identity'
 
 export type WalletStatus = 'none' | 'available' | 'connecting' | 'connected' | 'error'
@@ -24,6 +24,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [current, setCurrent] = useState<ProviderDetail | null>(null)
 
   useEffect(() => {
+    // With no ledger behind the page, a wallet has nothing to sign against.
+    if (HOSTED) return
     let live = true
     void discoverProviders().then((found) => {
       if (!live) return
