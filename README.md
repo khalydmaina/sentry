@@ -72,6 +72,34 @@ still never receives the policy, even when asked about the owner directly. It
 holds the holding because the bank signed it, and nothing else.
 Reproduce with `python3 scripts/hosting-check.py` against a fresh ledger.
 
+### Losing a host
+
+The hosting threshold says how many of the owner's hosts must confirm on its
+behalf. At 1 the wallet survives losing one:
+
+```sh
+python3 scripts/outage-demo.py
+```
+
+```
+  both hosts on the synchronizer           owner can spend: yes
+  sidebox off the synchronizer             owner can spend: yes
+  sidebox back on                          owner can spend: yes
+```
+
+A threshold of 2 means neither operator can move the owner's funds alone,
+which sounds strictly better and is a trap: raising it needs both hosts online,
+and once it is 2 and one host is gone the owner cannot act at all, including to
+lower the threshold again. A threshold equal to the number of hosts has no
+recovery path from a single outage. Found by wedging a test ledger into exactly
+that state.
+
+Two Canton details that cost time, in case they save yours: `reconnect_all`
+restores a participant that never connected but not one that was explicitly
+disconnected, where reconnecting the registered alias works immediately; and
+the sandbox's built-in bootstrap connects some participants and not others,
+varying between runs, which is why `scripts/connect-all.sc` exists.
+
 `founder` is nobody's demo role. It stands in for a person arriving with their own wallet and their own party, owning nothing, and is the party a connected wallet acts as.
 
 Two nodes is the point. The privacy page asks each participant what it holds, so "the bank cannot see the policy" is a fact about a separate node rather than a filter applied to one node's answer. The desk then walks through creating the wallet: the bank mints the holding on its own node and the owner signs the policy on theirs. Ctrl-C the script to throw both ledgers away.
