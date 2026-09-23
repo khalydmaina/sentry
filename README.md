@@ -112,7 +112,7 @@ The first transaction across the two participants takes noticeably longer than t
 Pages:
 
 - **Desk**: the owner seat (held queue, ledger, policy edits, direct payments) and the agent seat (requests, scenarios, a two-at-once race, and bypass attempts that submit forbidden commands so the ledger's refusal is shown).
-- **Privacy**: an active-contracts query put to each participant, as each party it hosts, at that node's own offset.
+- **Privacy**: an active-contracts query put to each participant, as each party it hosts, at that node's own offset. The governance contracts are rows too, because shared control is only shared if the members' nodes actually hold the proposals and confirmations.
 - **Contract**: the Daml source, imported at build time.
 
 The frontend never simulates. When the JSON API is down it says so and reconnects when the ledger comes back.
@@ -173,8 +173,10 @@ The two confirmations come from parties on different participants, so no single
 node can release a held request on its own.
 
 The same flow is on the desk, inside the held queue. A held request shows
-`Shared control · 0 of 2`, a **Propose release** button, then one button per
-member. The release button stays live below the threshold on purpose: pressing
+`Shared control · 0 of 2`, a **Propose release** and a **Propose refusal**
+button, then one button per member. Refusing is governed for the same reason
+releasing is: one member should not be able to block a payment the others want
+released. The release button stays live below the threshold on purpose: pressing
 it early shows the contract refusing, in its own words, which is the same
 argument the agent's bypass attempts make applied to the owner's side.
 

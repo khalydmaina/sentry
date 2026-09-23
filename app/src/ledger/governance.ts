@@ -20,7 +20,11 @@ export const GOVERNANCE_TEMPLATES = {
   rules: `${GOV}:Governance.Rules:GovernanceRules`,
   confirmation: `${GOV}:Governance.Confirmation:GovernanceConfirmation`,
   approval: '#sentry-governance:Wallet.Governed:GovernedApproval',
+  rejection: '#sentry-governance:Wallet.Governed:GovernedRejection',
 } as const
+
+/** What a proposal would do if it reached its threshold. */
+export type ProposalKind = 'release' | 'refusal'
 
 /** A governance member, and the node that hosts it. */
 export interface Member {
@@ -47,8 +51,10 @@ export interface Rules {
 
 export interface Proposal {
   cid: string
+  kind: ProposalKind
   pending: string
-  freshPolicy: string
+  /** Only a release charges a policy; a refusal touches no funds. */
+  freshPolicy: string | null
   proposer: string
   memo: string
 }
@@ -80,10 +86,12 @@ export function decodeGovernance(events: CreatedEvent[]): GovernanceView {
         break
       }
       case 'GovernedApproval':
+      case 'GovernedRejection':
         view.proposals.push({
           cid: e.contractId,
+          kind: name(e.templateId) === 'GovernedApproval' ? 'release' : 'refusal',
           pending: String(a.pending),
-          freshPolicy: String(a.freshPolicy),
+          freshPolicy: a.freshPolicy === undefined ? null : String(a.freshPolicy),
           proposer: String(a.proposer),
           memo: String(a.memo),
         })
@@ -121,6 +129,22 @@ export async function proposeRelease(
     CreateCommand: {
       templateId: GOVERNANCE_TEMPLATES.approval,
       createArguments: { owner, proposer, pending, freshPolicy, memo },
+    },
+  })
+}
+
+/**
+ * A proposal to refuse one held request.
+ *
+ * Refusing is governed for the same reason releasing is: one member should not
+ * be able to block a payment the others want released, any more than they
+ * should be able to release one alone.
+ */
+export async function proposeRefusal(owner: string, proposer: string, pending: string, memo: string): Promise<Transaction> {
+  return submit('owner', owner, {
+    CreateCommand: {
+      templateId: GOVERNANCE_TEMPLATES.rejection,
+      createArguments: { owner, proposer, pending, memo },
     },
   })
 }
