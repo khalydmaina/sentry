@@ -34,6 +34,8 @@ def acs(base, p):
     return sorted(names)
 
 print()
-print("owner's contracts, asked of sandbox   :", acs(W, owner))
-print("owner's contracts, asked of pebblebox :", acs(C, owner))
-print("bank's contracts,  asked of pebblebox :", acs(C, bank))
+print("owner, asked of sandbox   (hosts owner):", acs(W, owner))
+print("owner, asked of sidebox   (hosts owner):", acs("http://localhost:8864", owner))
+print("owner, asked of pebblebox (does not)   :", acs(C, owner))
+print("bank,  asked of pebblebox              :", acs(C, bank))
+print("merchant, asked of pebblebox           :", acs(C, merchant))
