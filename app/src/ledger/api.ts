@@ -56,11 +56,18 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Pr
  * Which participant node to ask. Each node serves its own JSON Ledger API and
  * only ever holds contracts its own parties are stakeholders on.
  */
-export const NODES = ['wallet', 'counterparty'] as const
+export const NODES = ['wallet', 'counterparty', 'governance'] as const
 export type Node = (typeof NODES)[number]
 
-export const NODE_NAME: Record<Node, string> = { wallet: 'sandbox', counterparty: 'pebblebox' }
-export const NODE_PORT: Record<Node, number> = { wallet: 6864, counterparty: 7864 }
+export const NODE_NAME: Record<Node, string> = { wallet: 'sandbox', counterparty: 'pebblebox', governance: 'sidebox' }
+export const NODE_PORT: Record<Node, number> = { wallet: 6864, counterparty: 7864, governance: 8864 }
+
+/** What each node is for, shown where the distinction matters. */
+export const NODE_ROLE: Record<Node, string> = {
+  wallet: 'hosts the owner and the agent',
+  counterparty: 'hosts the bank and the counterparties, and not the owner',
+  governance: 'a second host for the owner, nobody\'s counterparty',
+}
 
 /** Dev-server proxy prefix for a node. The wallet node is served at the root. */
 function prefix(node: Node): string {

@@ -146,9 +146,15 @@ export const ROLE_NODE: Record<Role, Node> = {
   outsider: 'counterparty',
 }
 
+/**
+ * Which demo roles each node hosts as their primary participant. The owner is
+ * additionally hosted by the governance node, which is a topology fact rather
+ * than a change of home, so it is not listed twice here.
+ */
 export const ROLES_ON: Record<Node, Role[]> = {
   wallet: ROLES.filter((r) => ROLE_NODE[r] === 'wallet'),
   counterparty: ROLES.filter((r) => ROLE_NODE[r] === 'counterparty'),
+  governance: [],
 }
 
 export async function loadParties(): Promise<Parties> {

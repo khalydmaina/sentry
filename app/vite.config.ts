@@ -6,11 +6,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    // Two participant nodes on one synchronizer. `/v2` is the wallet node that
-    // hosts the owner and the agent; `/counterparty/v2` is the node that hosts
-    // the bank, the merchant and everyone else.
+    // Three participant nodes on one synchronizer. `/v2` is the wallet node,
+    // `/counterparty/v2` hosts the bank and the counterparties, and
+    // `/governance/v2` is the owner's second host.
     proxy: {
       '/counterparty/v2': { target: 'http://localhost:7864', rewrite: (p) => p.replace(/^\/counterparty/, '') },
+      '/governance/v2': { target: 'http://localhost:8864', rewrite: (p) => p.replace(/^\/governance/, '') },
       '/v2': 'http://localhost:6864',
     },
     // The contract page imports the real Daml source from ../main.
