@@ -8,7 +8,7 @@ import { COUNTERPARTY_ROLES, NoticeBanner, parseAmount, WINDOWS, type Notice } f
 type Step = 'idle' | 'flight' | 'done'
 
 export function CreateWallet() {
-  const { parties, refresh } = useLedger()
+  const { parties, refresh, ownerParty } = useLedger()
   // A connected wallet signs the policy itself; otherwise the sandbox's demo user does.
   const { identity } = useWallet()
   const [balance, setBalance] = useState('1000.00')
@@ -32,7 +32,7 @@ export function CreateWallet() {
     setNotice(null)
     try {
       setSteps(['flight', 'idle'])
-      const holding = await mintHolding(parties, values.balance!)
+      const holding = await mintHolding(parties, values.balance!, ownerParty ?? undefined)
       setSteps(['done', 'flight'])
       await signPolicy(
         parties,
@@ -46,6 +46,7 @@ export function CreateWallet() {
           allowed: allowed.map((r) => parties[r]),
         },
         identity?.submit,
+        ownerParty ?? undefined,
       )
       setSteps(['done', 'done'])
       await refresh()
@@ -86,7 +87,7 @@ export function CreateWallet() {
               </dd>
               <dt>visible to</dt>
               <dd style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                <PartyToken role="owner" id={parties.owner} compact />
+                <PartyToken role="owner" id={ownerParty ?? parties.owner} compact />
                 <PartyToken role="agent" id={parties.agent} compact />
               </dd>
             </dl>
@@ -139,7 +140,7 @@ export function CreateWallet() {
             <dl className="kv" style={{ margin: 0 }}>
               <dt>signed by</dt>
               <dd>
-                <PartyToken role="owner" id={parties.owner} compact />
+                <PartyToken role="owner" id={ownerParty ?? parties.owner} compact />
               </dd>
               <dt>visible to</dt>
               <dd>

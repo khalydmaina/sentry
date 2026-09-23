@@ -26,8 +26,10 @@ export function App() {
   }, [])
 
   return (
-    <LedgerProvider>
-      <WalletProvider>
+    // Wallet first: the ledger needs to know which party is connected before it
+    // can decide whose wallet to load.
+    <WalletProvider>
+      <LedgerProvider>
         <TopBar route={route} />
         <main>
           {route === 'landing' && <Landing />}
@@ -35,7 +37,7 @@ export function App() {
           {route === 'privacy' && <Privacy />}
           {route === 'contract' && <Contract />}
         </main>
-      </WalletProvider>
-    </LedgerProvider>
+      </LedgerProvider>
+    </WalletProvider>
   )
 }

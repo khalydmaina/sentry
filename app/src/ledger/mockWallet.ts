@@ -39,7 +39,9 @@ export function installMockWallet(): void {
   let party: string | null = null
   const submitted = new Map<string, Transaction>()
 
-  const whoami = async () => (party ??= await userParty('owner'))
+  // Deliberately NOT the demo owner. A real wallet arrives with its own party
+  // owning nothing, and that is the path worth exercising.
+  const whoami = async () => (party ??= await userParty('founder').catch(() => userParty('owner')))
 
   const provider = {
     async request({ method, params }: { method: string; params?: unknown }): Promise<unknown> {
@@ -50,10 +52,10 @@ export function installMockWallet(): void {
           return { isConnected: true }
 
         case 'getPrimaryAccount':
-          return { partyId: await whoami(), hint: 'owner' }
+          return { partyId: await whoami(), hint: 'founder' }
 
         case 'listAccounts':
-          return [{ partyId: await whoami(), hint: 'owner' }]
+          return [{ partyId: await whoami(), hint: 'founder' }]
 
         case 'getActiveNetwork':
           return { networkId: 'canton:da-mainnet' }
@@ -80,7 +82,7 @@ export function installMockWallet(): void {
             mockLog.push(`disclosed ${disclosedContracts!.length} contract(s)`)
           }
           await new Promise((r) => setTimeout(r, APPROVAL_MS))
-          const tx = await submitAsUser('owner', me, command!)
+          const tx = await submitAsUser('founder', me, command!)
           submitted.set(tx.updateId, tx)
           return { tx: { payload: { updateId: tx.updateId } } }
         }

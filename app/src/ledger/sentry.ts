@@ -173,9 +173,9 @@ export async function loadRoleView(role: Role): Promise<View> {
   return loadView(party, await ledgerEnd(node), node)
 }
 
-/** The live policy between the demo owner and agent, newest first if several exist. */
-export function walletPolicy(view: View, parties: Parties): Policy | null {
-  const mine = view.policies.filter((p) => p.owner === parties.owner && p.agent === parties.agent)
+/** The live policy between this owner and the agent, newest first if several exist. */
+export function walletPolicy(view: View, ownerParty: string, agentParty: string): Policy | null {
+  const mine = view.policies.filter((p) => p.owner === ownerParty && p.agent === agentParty)
   mine.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   return mine[0] ?? null
 }
@@ -242,6 +242,13 @@ export interface WalletTerms {
 const asOwner = (parties: Parties): Signer => (command) => submit('owner', parties.owner, command)
 
 /**
+ * Whose wallet this is. A connected wallet supplies its own party, which owns
+ * nothing until the issuer mints for it, so the owner is a parameter rather
+ * than a fixed demo role.
+ */
+export type OwnerParty = string
+
+/**
  * Contracts a command needs the submitting participant to know about.
  * Only gathered for a signer that says it needs them, since it costs a query
  * and the local sandbox already holds everything.
@@ -252,7 +259,7 @@ async function disclose(sign: Signer, party: string, contractIds: Array<string |
 }
 
 /** Two transactions, two signers: Bank mints the holding, then the owner signs the policy. */
-export async function mintHolding(parties: Parties, amount: number): Promise<string> {
+export async function mintHolding(parties: Parties, amount: number, ownerParty: OwnerParty = parties.owner): Promise<string> {
   // The bank is hosted by the counterparty node, so the mint is submitted there.
   const tx = await submit(
     'bank',
@@ -260,7 +267,7 @@ export async function mintHolding(parties: Parties, amount: number): Promise<str
     {
       CreateCommand: {
         templateId: TEMPLATES.holding,
-        createArguments: { issuer: parties.bank, owner: parties.owner, agent: parties.agent, amount: decimal(amount) },
+        createArguments: { issuer: parties.bank, owner: ownerParty, agent: parties.agent, amount: decimal(amount) },
       },
     },
     ROLE_NODE.bank,
@@ -268,12 +275,12 @@ export async function mintHolding(parties: Parties, amount: number): Promise<str
   return tx.events.find((e) => e.CreatedEvent)!.CreatedEvent!.contractId
 }
 
-export async function signPolicy(parties: Parties, holding: string, terms: WalletTerms, sign: Signer = asOwner(parties)): Promise<string> {
+export async function signPolicy(parties: Parties, holding: string, terms: WalletTerms, sign: Signer = asOwner(parties), ownerParty: OwnerParty = parties.owner): Promise<string> {
   const tx = await sign({
     CreateCommand: {
       templateId: TEMPLATES.policy,
       createArguments: {
-        owner: parties.owner,
+        owner: ownerParty,
         agent: parties.agent,
         issuer: parties.bank,
         holding,
@@ -301,17 +308,17 @@ export async function requestTransfer(parties: Parties, policyCid: string, amoun
   return outcomeOf(tx)
 }
 
-async function freshPolicy(parties: Parties): Promise<Policy> {
-  const policy = walletPolicy(await loadView(parties.owner), parties)
+async function freshPolicy(parties: Parties, ownerParty: OwnerParty = parties.owner): Promise<Policy> {
+  const policy = walletPolicy(await loadView(ownerParty), ownerParty, parties.agent)
   if (!policy) throw new LedgerError(404, 'NO_POLICY', 'No live WalletPolicy for this owner and agent.')
   return policy
 }
 
 /** Looks the policy up immediately before the call: every spend replaces it. */
-export async function approve(parties: Parties, pendingCid: string, sign: Signer = asOwner(parties)) {
-  const policy = await freshPolicy(parties)
+export async function approve(parties: Parties, pendingCid: string, sign: Signer = asOwner(parties), ownerParty: OwnerParty = parties.owner) {
+  const policy = await freshPolicy(parties, ownerParty)
   // Approve reads the policy and its holding, so all three must be disclosed.
-  const disclosed = await disclose(sign, parties.owner, [pendingCid, policy.cid, policy.holding])
+  const disclosed = await disclose(sign, ownerParty, [pendingCid, policy.cid, policy.holding])
   const tx = await sign(
     { ExerciseCommand: { templateId: TEMPLATES.pending, contractId: pendingCid, choice: 'Approve', choiceArgument: { freshPolicy: policy.cid } } },
     disclosed,
@@ -319,14 +326,14 @@ export async function approve(parties: Parties, pendingCid: string, sign: Signer
   return outcomeOf(tx)
 }
 
-export async function reject(parties: Parties, pendingCid: string, sign: Signer = asOwner(parties)) {
-  const disclosed = await disclose(sign, parties.owner, [pendingCid])
+export async function reject(parties: Parties, pendingCid: string, sign: Signer = asOwner(parties), ownerParty: OwnerParty = parties.owner) {
+  const disclosed = await disclose(sign, ownerParty, [pendingCid])
   const tx = await sign({ ExerciseCommand: { templateId: TEMPLATES.pending, contractId: pendingCid, choice: 'Reject', choiceArgument: {} } }, disclosed)
   return outcomeOf(tx)
 }
 
-export async function updatePolicy(parties: Parties, changes: Omit<WalletTerms, 'startingBalance'>, sign: Signer = asOwner(parties)) {
-  const policy = await freshPolicy(parties)
+export async function updatePolicy(parties: Parties, changes: Omit<WalletTerms, 'startingBalance'>, sign: Signer = asOwner(parties), ownerParty: OwnerParty = parties.owner) {
+  const policy = await freshPolicy(parties, ownerParty)
   await sign({
     ExerciseCommand: {
       templateId: TEMPLATES.policy,

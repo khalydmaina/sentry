@@ -49,8 +49,10 @@ The ledger script builds the Daml, starts **two Canton participants on one synch
 
 | Participant | JSON API | Parties |
 | --- | --- | --- |
-| `sandbox` | 6864 | owner, agent |
+| `sandbox` | 6864 | owner, agent, founder |
 | `pebblebox` | 7864 | bank, merchant, stranger, outsider |
+
+`founder` is nobody's demo role. It stands in for a person arriving with their own wallet and their own party, owning nothing, and is the party a connected wallet acts as.
 
 Two nodes is the point. The privacy page asks each participant what it holds, so "the bank cannot see the policy" is a fact about a separate node rather than a filter applied to one node's answer. The desk then walks through creating the wallet: the bank mints the holding on its own node and the owner signs the policy on theirs. Ctrl-C the script to throw both ledgers away.
 
@@ -95,5 +97,5 @@ Canton refuses a changed package with a name and version it has already seen (`K
 - The asset model is self-contained, not wired to Canton Coin or a token standard.
 - The outsider and stranger share the counterparty node with the bank and the merchant, so their empty views are the ledger API's per-party filter. The claim demonstrated across nodes is the bank's and the merchant's: neither participant receives the policy.
 - Both participants run in-memory, so everything is thrown away when the ledger stops.
-- A wallet-connected owner signs with their own party, which owns no holding, so wallet onboarding has no funding path yet.
+- A wallet-connected owner onboards with their own party, but the issuer mints on request with no checks, which is a demo faucet rather than a funding model.
 - Neither participant requires authentication, which is appropriate for a local demo and not for anything else.

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ledgerEnd, LedgerError, NODES, type Node } from './api'
 import { loadParties, loadView, ROLES, walletPolicy, type Parties, type Policy, type Role, type View } from './sentry'
+import { useWallet } from './WalletContext'
 
 export type LedgerStatus = 'connecting' | 'offline' | 'no-parties' | 'ready'
 
@@ -11,6 +12,12 @@ interface LedgerState {
   offset: number | null
   /** Every participant's own offset. They advance independently. */
   offsets: Record<Node, number | null>
+  /**
+   * The party the desk is acting as. A connected wallet supplies its own,
+   * which is how a real owner gets a wallet of their own rather than the
+   * demo one. Falls back to the demo owner when nothing is connected.
+   */
+  ownerParty: string | null
   owner: View | null
   agent: View | null
   policy: Policy | null
@@ -24,6 +31,8 @@ const Ctx = createContext<LedgerState | null>(null)
 const POLL_MS = 1000
 
 export function LedgerProvider({ children }: { children: ReactNode }) {
+  const { identity } = useWallet()
+  const connectedParty = identity?.partyId ?? null
   const [status, setStatus] = useState<LedgerStatus>('connecting')
   const [parties, setParties] = useState<Parties | null>(null)
   const [offset, setOffset] = useState<number | null>(null)
@@ -31,6 +40,8 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
   const [owner, setOwner] = useState<View | null>(null)
   const [agent, setAgent] = useState<View | null>(null)
   const seen = useRef<number | null>(null)
+  const connectedRef = useRef<string | null>(null)
+  const ownerRef = useRef<string | null>(null)
   const partiesRef = useRef<Parties | null>(null)
   const inFlight = useRef(false)
 
@@ -59,8 +70,10 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
           throw err
         }
       }
-      if (force || seen.current !== end) {
-        const [o, a] = await Promise.all([loadView(p.owner, end), loadView(p.agent, end)])
+      const actingAs = connectedRef.current ?? p.owner
+      if (force || seen.current !== end || actingAs !== ownerRef.current) {
+        ownerRef.current = actingAs
+        const [o, a] = await Promise.all([loadView(actingAs, end), loadView(p.agent, end)])
         seen.current = end
         setOffset(end)
         setOwner(o)
@@ -77,6 +90,12 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Connecting or disconnecting a wallet changes whose wallet is on screen.
+  useEffect(() => {
+    connectedRef.current = connectedParty
+    void tick(true)
+  }, [connectedParty, tick])
+
   useEffect(() => {
     void tick()
     const id = setInterval(() => void tick(), POLL_MS)
@@ -88,10 +107,11 @@ export function LedgerProvider({ children }: { children: ReactNode }) {
     [parties],
   )
 
-  const policy = owner && parties ? walletPolicy(owner, parties) : null
+  const ownerParty = connectedParty ?? parties?.owner ?? null
+  const policy = owner && parties && ownerParty ? walletPolicy(owner, ownerParty, parties.agent) : null
 
   return (
-    <Ctx.Provider value={{ status, parties, offset, offsets, owner, agent, policy, roleOf, refresh: () => tick(true) }}>
+    <Ctx.Provider value={{ status, parties, offset, offsets, ownerParty, owner, agent, policy, roleOf, refresh: () => tick(true) }}>
       {children}
     </Ctx.Provider>
   )

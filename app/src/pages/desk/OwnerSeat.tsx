@@ -8,7 +8,7 @@ import { LedgerTable } from './LedgerTable'
 import { COUNTERPARTY_ROLES, NoticeBanner, parseAmount, SeatHead, WINDOWS, type Notice } from './shared'
 
 export function OwnerSeat({ policy, onOutcome }: { policy: Policy; onOutcome: (n: Notice) => void }) {
-  const { parties, owner, refresh, roleOf } = useLedger()
+  const { parties, owner, refresh, roleOf, ownerParty } = useLedger()
   const { identity } = useWallet()
   const [drawer, setDrawer] = useState<'edit' | 'pay' | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -35,7 +35,7 @@ export function OwnerSeat({ policy, onOutcome }: { policy: Policy; onOutcome: (n
   return (
     <div className="seat">
       <SeatHead title="Owner seat">
-        <PartyToken role="owner" id={parties.owner} showRole={false} />
+        <PartyToken role="owner" id={ownerParty ?? parties.owner} showRole={false} />
       </SeatHead>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -110,7 +110,7 @@ export function OwnerSeat({ policy, onOutcome }: { policy: Policy; onOutcome: (n
                         disabled={Boolean(busy)}
                         onClick={() =>
                           act(`approve:${p.cid}`, async () => {
-                            const o = await approve(parties, p.cid, identity?.submit)
+                            const o = await approve(parties, p.cid, identity?.submit, ownerParty ?? undefined)
                             return o ? { kind: 'outcome', outcome: o, actor: 'owner' } : { kind: 'text', tone: 'info', title: 'Submitted.' }
                           })
                         }
@@ -124,7 +124,7 @@ export function OwnerSeat({ policy, onOutcome }: { policy: Policy; onOutcome: (n
                         disabled={Boolean(busy)}
                         onClick={() =>
                           act(`reject:${p.cid}`, async () => {
-                            const o = await reject(parties, p.cid, identity?.submit)
+                            const o = await reject(parties, p.cid, identity?.submit, ownerParty ?? undefined)
                             return o ? { kind: 'outcome', outcome: o, actor: 'owner' } : { kind: 'text', tone: 'info', title: 'Submitted.' }
                           })
                         }
@@ -151,7 +151,7 @@ export function OwnerSeat({ policy, onOutcome }: { policy: Policy; onOutcome: (n
 }
 
 function EditPolicy({ policy, onDone }: { policy: Policy; onDone: (n: Notice) => void }) {
-  const { parties, roleOf } = useLedger()
+  const { parties, roleOf, ownerParty } = useLedger()
   const { identity } = useWallet()
   const [perTx, setPerTx] = useState(policy.perTxCap.toFixed(2))
   const [daily, setDaily] = useState(policy.dailyCap.toFixed(2))
@@ -172,7 +172,7 @@ function EditPolicy({ policy, onDone }: { policy: Policy; onDone: (n: Notice) =>
     setBusy(true)
     setNotice(null)
     try {
-      await updatePolicy(parties!, { perTxCap: v.perTx!, dailyCap: v.daily!, autoApproveThreshold: v.threshold!, windowMs, allowed }, identity?.submit)
+      await updatePolicy(parties!, { perTxCap: v.perTx!, dailyCap: v.daily!, autoApproveThreshold: v.threshold!, windowMs, allowed }, identity?.submit, ownerParty ?? undefined)
       onDone({ kind: 'text', tone: 'allow', title: 'Policy updated.', body: 'UpdatePolicy replaced the WalletPolicy contract. The rolling window history carries over.' })
     } catch (error) {
       setNotice({ kind: 'error', error })
