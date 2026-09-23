@@ -17,6 +17,15 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RUN="$ROOT/.ledger"
 DAR="$ROOT/main/.daml/dist/sentry-0.1.0.dar"
+# The governance packages: BitSafe's threshold engine and Sentry's governed
+# actions. Uploaded everywhere, because any participant that has to interpret
+# part of a release transaction needs the code, not just the contracts.
+GOV_DARS=(
+  "$ROOT/governance/vendor/splice-util-0.1.4.dar"
+  "$ROOT/governance/vendor/governance-action-v1-0.1.0.dar"
+  "$ROOT/governance/vendor/governance-core-v1-0.1.0.dar"
+  "$ROOT/governance/.daml/dist/sentry-governance-0.1.0.dar"
+)
 SCRIPTS_DAR="$ROOT/test/.daml/dist/sentry-test-0.1.0.dar"
 CONF="$ROOT/scripts/three-node.conf"
 REMOTE="$ROOT/scripts/remote.conf"
@@ -54,16 +63,21 @@ for attempt in $(seq 1 30); do
 done
 echo "$out" | grep -o "CONNECTED=.*" || { echo "Participants never connected"; exit 1; }
 
-upload() { # name, json api
-  echo "Uploading $(basename "$DAR") to $1..."
+upload_one() { # name, json api, dar
   for attempt in $(seq 1 30); do
     status=$(curl -s -o "$RUN/upload-$1.out" -w '%{http_code}' -X POST "$2/v2/packages" \
-      -H 'Content-Type: application/octet-stream' --data-binary @"$DAR")
+      -H 'Content-Type: application/octet-stream' --data-binary @"$3")
     [ "$status" = 200 ] && return 0
-    grep -q CANNOT_AUTODETECT_SYNCHRONIZER "$RUN/upload-$1.out" || { echo "Upload to $1 failed ($status):"; cat "$RUN/upload-$1.out"; exit 1; }
+    grep -q CANNOT_AUTODETECT_SYNCHRONIZER "$RUN/upload-$1.out" || { echo "Upload of $(basename "$3") to $1 failed ($status):"; cat "$RUN/upload-$1.out"; exit 1; }
     sleep 2
   done
-  echo "Upload to $1 never succeeded"; cat "$RUN/upload-$1.out"; exit 1
+  echo "Upload of $(basename "$3") to $1 never succeeded"; cat "$RUN/upload-$1.out"; exit 1
+}
+
+upload() { # name, json api
+  echo "Uploading packages to $1..."
+  upload_one "$1" "$2" "$DAR"
+  for d in "${GOV_DARS[@]}"; do upload_one "$1" "$2" "$d"; done
 }
 upload sandbox "$WALLET_JSON"
 upload pebblebox "$COUNTERPARTY_JSON"
@@ -77,15 +91,24 @@ allocate() { # script name, grpc port, label
 }
 allocate walletParties "$WALLET_GRPC" wallet
 allocate counterpartyParties "$COUNTERPARTY_GRPC" counterparty
+# One governance member per participant that hosts the owner, so a threshold
+# of two needs confirmations from parties on different nodes.
+allocate memberAlice "$WALLET_GRPC" member-alice
+allocate memberBob "$GOVERNANCE_GRPC" member-bob
 
 # Host the owner on a second participant, before it holds any contracts.
 echo "Hosting the owner party on sandbox and sidebox..."
 console "$ROOT/scripts/host-owner.sc" | grep -oE "HOSTS=.*|SANDBOX_ERR=.*|SIDEBOX_ERR=.*" || true
 
+# Two members, threshold two: no single node can release a held request.
+echo "Creating the governance rules..."
+python3 "$ROOT/scripts/governance-setup.py" || { echo "Governance setup failed"; exit 1; }
+
 echo
 echo "Ledger ready."
 echo "  wallet node       $WALLET_JSON        Owner, Agent"
 echo "  counterparty node $COUNTERPARTY_JSON  Bank, Merchant, Stranger, Outsider"
-echo "  governance node   $GOVERNANCE_JSON  second host for the Owner party"
+echo "  governance node   $GOVERNANCE_JSON  second host for the Owner party, hosts Bob"
+echo "  governance        2 of 2: Alice on sandbox, Bob on sidebox"
 echo "Ctrl-C to stop."
 wait $SANDBOX

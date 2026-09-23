@@ -30,6 +30,9 @@ agent/sentry-agent.mjs          The agent as a program, outside the browser
 governance/                     Clearing a held request under shared control
 scripts/three-node.conf         The two extra Canton participants
 scripts/host-owner.sc           Hosts the owner party on two of them
+scripts/governance-setup.py     Two members, threshold two
+scripts/governance-demo.py      A release that needs both signatures
+scripts/outage-demo.py          What losing a host does
 scripts/ledger.sh               Both participants, package upload, demo parties
 scripts/mutants.sh              Breaks the policy rules on purpose, checks the tests notice
 ```
@@ -140,7 +143,34 @@ testSingleMemberStillWorks        threshold of one is the old behaviour
 Members are deliberately not observers on the governance contracts. Each
 member hosts the governance party on its own participant and reads as it, so
 visibility is a topology concern rather than something modelled in the
-contract. The tests express that with `actAs member <> readAs owner`.
+contract. The tests express that with `actAs member <> readAs owner`, and the
+running ledger makes it real: Alice is hosted by `sandbox` and Bob by
+`sidebox`, both of which host the owner.
+
+`./scripts/ledger.sh` sets that up, and the whole release runs on it:
+
+```sh
+python3 scripts/governance-demo.py
+```
+
+```
+Governance: 2 of 2 members
+  Alice  hosted by sandbox
+  Bob    hosted by sidebox
+
+  agent requests 120.00        -> HELD, waiting on the owner
+  Alice proposes a release
+  Alice confirms               -> 1 of 2
+  try to release on 1          -> REFUSED: Enough confirmations to execute action
+  Bob confirms, from sidebox   -> 2 of 2
+  release on 2                 -> SETTLED
+
+  merchant balance 120.00 -> 240.00
+```
+
+The refusal in the middle is the ledger's, quoting the requirement it failed.
+The two confirmations come from parties on different participants, so no single
+node can release a held request on its own.
 
 The vendored DARs in `governance/vendor/` are built from Decentralization
 Manager at Apache-2.0, with the licence alongside them.

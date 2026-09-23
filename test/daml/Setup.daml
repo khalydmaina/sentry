@@ -50,6 +50,20 @@ counterpartyParties = do
   createDemoUsers
     [("bank", bank), ("merchant", merchant), ("stranger", stranger), ("outsider", outsider)]
 
+-- | A governance member, allocated on whichever participant this is run
+-- against. Two members on two different participants is what makes the
+-- threshold mean something: releasing a held request then needs confirmations
+-- from parties that no single node speaks for.
+memberAlice : Script ()
+memberAlice = do
+  p <- allocateParty "Alice"
+  createDemoUsers [("alice", p)]
+
+memberBob : Script ()
+memberBob = do
+  p <- allocateParty "Bob"
+  createDemoUsers [("bob", p)]
+
 -- | Run once against a fresh sandbox. Parties and users only: the frontend
 -- mints the holding and creates the policy. Single-node setup, kept for
 -- running the contracts without the two-participant topology.
