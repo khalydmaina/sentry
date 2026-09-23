@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AmountField, Button, Chip, Micro, PartyToken } from '../../components/ui'
 import { useLedger } from '../../ledger/LedgerContext'
 import { useWallet } from '../../ledger/WalletContext'
@@ -19,6 +19,11 @@ export function CreateWallet() {
   const [allowed, setAllowed] = useState<Role[]>(['merchant'])
   const [steps, setSteps] = useState<[Step, Step]>(['idle', 'idle'])
   const [notice, setNotice] = useState<Notice | null>(null)
+  // The first transaction across two participants waits on them exchanging
+  // topology, which looks like a hang. Say so rather than leave a dead button.
+  const [slow, setSlow] = useState(false)
+  const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (slowTimer.current) clearTimeout(slowTimer.current) }, [])
   if (!parties) return null
 
   const values = { balance: parseAmount(balance), perTx: parseAmount(perTx), daily: parseAmount(daily), threshold: parseAmount(threshold) }
@@ -32,6 +37,7 @@ export function CreateWallet() {
     setNotice(null)
     try {
       setSteps(['flight', 'idle'])
+      slowTimer.current = setTimeout(() => setSlow(true), 6000)
       const holding = await mintHolding(parties, values.balance!, ownerParty ?? undefined)
       setSteps(['done', 'flight'])
       await signPolicy(
@@ -53,6 +59,9 @@ export function CreateWallet() {
     } catch (e) {
       setSteps(['idle', 'idle'])
       setNotice({ kind: 'error', error: e })
+    } finally {
+      if (slowTimer.current) clearTimeout(slowTimer.current)
+      setSlow(false)
     }
   }
 
@@ -69,6 +78,12 @@ export function CreateWallet() {
       </div>
 
       {notice && <NoticeBanner notice={notice} />}
+      {slow && !notice && (
+        <p className="help" style={{ margin: 0 }}>
+          Still working. The first transaction across the two participants waits for them to exchange topology, which takes a few seconds. Later ones settle in well under a
+          second.
+        </p>
+      )}
 
       <div className="create">
         <section className="panel">
