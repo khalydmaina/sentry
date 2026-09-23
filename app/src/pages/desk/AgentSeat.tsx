@@ -21,7 +21,7 @@ import { COUNTERPARTY_ROLES, NoticeBanner, parseAmount, SeatHead, type Notice } 
 const round2 = (n: number) => Math.floor(n * 100) / 100
 
 export function AgentSeat({ policy, balance, onOutcome }: { policy: Policy; balance: number; onOutcome: (n: Notice) => void }) {
-  const { parties, agent, refresh } = useLedger()
+  const { parties, agent, refresh, ownerParty } = useLedger()
   const now = useNow()
   const [to, setTo] = useState<Role>('merchant')
   const [qty, setQty] = useState('40.00')
@@ -32,7 +32,7 @@ export function AgentSeat({ policy, balance, onOutcome }: { policy: Policy; bala
   const [attempts, setAttempts] = useState<Record<string, { code: string; text: string } | 'flight'>>({})
   if (!parties || !agent) return null
 
-  const agentPolicy = walletPolicy(agent, parties) ?? policy
+  const agentPolicy = walletPolicy(agent, ownerParty!, parties.agent) ?? policy
   const value = parseAmount(qty)
   const counterparty = parties[to]
   const check = value === null ? null : preview(agentPolicy, balance, value, counterparty, now)
@@ -46,7 +46,7 @@ export function AgentSeat({ policy, balance, onOutcome }: { policy: Policy; bala
     setQty(amt.toFixed(2))
     setMemo(note)
     try {
-      const fresh = walletPolicy(await loadView(parties!.agent), parties!)
+      const fresh = walletPolicy(await loadView(parties!.agent), ownerParty!, parties!.agent)
       if (!fresh) throw new LedgerError(404, 'NO_POLICY', 'The agent sees no live WalletPolicy.')
       const o = await requestTransfer(parties!, fresh.cid, amt, parties![role], note)
       const n: Notice = o ? { kind: 'outcome', outcome: o, actor: 'agent' } : { kind: 'text', tone: 'info', title: 'Submitted.' }
@@ -67,7 +67,7 @@ export function AgentSeat({ policy, balance, onOutcome }: { policy: Policy; bala
     setBusy('race')
     setNotice(null)
     setRace([{ status: 'flight' }, { status: 'flight' }])
-    const start = walletPolicy(await loadView(parties!.agent), parties!)
+    const start = walletPolicy(await loadView(parties!.agent), ownerParty!, parties!.agent)
     if (!start) {
       setBusy(null)
       return
@@ -80,7 +80,7 @@ export function AgentSeat({ policy, balance, onOutcome }: { policy: Policy; bala
       } catch (error) {
         if (!isStale(error)) return update({ status: 'refused', error })
         update({ status: 'stale', policyCid: start.cid, code: error instanceof LedgerError ? error.code : '' })
-        const retryPolicy = walletPolicy(await loadView(parties!.agent), parties!)
+        const retryPolicy = walletPolicy(await loadView(parties!.agent), ownerParty!, parties!.agent)
         try {
           const o = await requestTransfer(parties!, retryPolicy!.cid, amt, parties![firstListed], `race ${i === 0 ? 'A' : 'B'} retry`)
           update({ status: 'retried', outcome: o, policyCid: start.cid, retryCid: retryPolicy!.cid, code: error instanceof LedgerError ? error.code : '' })
@@ -99,7 +99,7 @@ export function AgentSeat({ policy, balance, onOutcome }: { policy: Policy; bala
     setAttempts((s) => ({ ...s, [id]: 'flight' }))
     const once = async () => {
       const view = await loadView(parties!.agent)
-      await a.run(parties!, walletPolicy(view, parties!) ?? agentPolicy, view.pending[0])
+      await a.run(parties!, walletPolicy(view, ownerParty!, parties!.agent) ?? agentPolicy, view.pending[0])
     }
     try {
       // A spend elsewhere can replace the policy mid-attempt. Retry once so the
