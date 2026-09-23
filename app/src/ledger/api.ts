@@ -148,7 +148,6 @@ export type Command =
   | { CreateCommand: { templateId: string; createArguments: Record<string, unknown> } }
   | { ExerciseCommand: { templateId: string; contractId: string; choice: string; choiceArgument: Record<string, unknown> } }
 
-/** Submits as `party`, acting through the ledger user of the same role. */
 /**
  * Submits as `party` through the ledger user of the same role.
  *
@@ -156,9 +155,18 @@ export type Command =
  * bank is on the counterparty node, so minting there through the wallet node
  * fails with an unknown user.
  */
-export async function submit(userId: string, party: string, command: Command, node: Node = 'wallet'): Promise<Transaction> {
+export async function submit(userId: string, party: string, command: Command, node: Node = 'wallet', readAs?: string[]): Promise<Transaction> {
   const r = await call<{ transaction: Transaction }>('POST', `${prefix(node)}/v2/commands/submit-and-wait-for-transaction`, {
-    commands: { commands: [command], commandId: crypto.randomUUID(), userId, actAs: [party] },
+    commands: {
+      commands: [command],
+      commandId: crypto.randomUUID(),
+      userId,
+      actAs: [party],
+      // A governance member is not an observer on the rules. It reads them by
+      // hosting the governance party and reading as it, which is a topology
+      // fact expressed here as readAs.
+      ...(readAs?.length ? { readAs } : {}),
+    },
   })
   return r.transaction
 }

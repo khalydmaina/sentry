@@ -172,6 +172,18 @@ The refusal in the middle is the ledger's, quoting the requirement it failed.
 The two confirmations come from parties on different participants, so no single
 node can release a held request on its own.
 
+The same flow is on the desk, inside the held queue. A held request shows
+`Shared control · 0 of 2`, a **Propose release** button, then one button per
+member. The release button stays live below the threshold on purpose: pressing
+it early shows the contract refusing, in its own words, which is the same
+argument the agent's bypass attempts make applied to the owner's side.
+
+```
+Shared control · 1 of 2 confirmations   [✓ alice] [confirm as bob] [Release on 1]
+  -> Refused by the ledger. DAML_FAILURE: The requirement
+     'Enough confirmations to execute action' was not met.
+```
+
 The vendored DARs in `governance/vendor/` are built from Decentralization
 Manager at Apache-2.0, with the licence alongside them.
 

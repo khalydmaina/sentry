@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AmountField, Button, Micro, PartyToken } from '../../components/ui'
 import { useLedger } from '../../ledger/LedgerContext'
+import { confirmationsFor, confirmRelease, proposalFor, proposeRelease, releaseApproved } from '../../ledger/governance'
 import { useWallet } from '../../ledger/WalletContext'
 import { approve, ownerTransfer, reject, updatePolicy, type Parties, type Policy, type Role } from '../../ledger/sentry'
 import { amount, clock } from '../../lib/format'
@@ -137,6 +138,7 @@ export function OwnerSeat({ policy, onOutcome }: { policy: Policy; onOutcome: (n
                         <span key={r}>{r}</span>
                       ))}
                     </div>
+                    <SharedControl pending={p.cid} busy={busy} act={act} />
                   </article>
                 )
               })}
@@ -263,6 +265,97 @@ function PayDirect({ parties, onSubmit, busy }: { parties: Parties; onSubmit: (t
           Pay as owner
         </Button>
       </div>
+    </div>
+  )
+}
+
+
+/**
+ * Releasing a held request under shared control.
+ *
+ * The threshold is not enforced here. The release button stays live below it,
+ * because a refusal from the contract is worth seeing: it is the same argument
+ * the agent's bypass attempts make, applied to the owner's own side.
+ */
+function SharedControl({
+  pending,
+  busy,
+  act,
+}: {
+  pending: string
+  busy: string | null
+  act: (key: string, run: () => Promise<Notice>) => void
+}) {
+  const { governance, members, ownerParty, policy, roleOf } = useLedger()
+  if (!governance?.rules || !ownerParty || !policy || members.length === 0) return null
+
+  const rules = governance.rules
+  const proposal = proposalFor(governance, pending)
+  const confirmations = proposal ? confirmationsFor(governance, proposal.cid) : []
+  const confirmed = new Set(confirmations.map((c) => c.confirmer))
+  const met = confirmations.length >= rules.threshold
+
+  return (
+    <div className="shared-control">
+      <Micro>
+        Shared control · {confirmations.length} of {rules.threshold} confirmations
+      </Micro>
+      {!proposal ? (
+        <Button
+          small
+          busy={busy === `propose:${pending}`}
+          disabled={Boolean(busy)}
+          onClick={() =>
+            act(`propose:${pending}`, async () => {
+              await proposeRelease(ownerParty, members[0].party, pending, policy.cid, 'released under shared control')
+              return { kind: 'text', tone: 'info', title: 'Proposed. Each member confirms from their own node.' }
+            })
+          }
+        >
+          Propose release
+        </Button>
+      ) : (
+        <div className="members">
+          {members.map((m) => {
+            const has = confirmed.has(m.party)
+            return (
+              <Button
+                key={m.role}
+                small
+                disabled={has || Boolean(busy)}
+                busy={busy === `confirm:${m.role}:${pending}`}
+                onClick={() =>
+                  act(`confirm:${m.role}:${pending}`, async () => {
+                    await confirmRelease(m, ownerParty, rules.cid, proposal.cid)
+                    return { kind: 'text', tone: 'info', title: `${m.role} confirmed.` }
+                  })
+                }
+                title={`${m.role} is hosted by ${m.node === 'wallet' ? 'sandbox' : 'sidebox'}`}
+              >
+                {has ? `✓ ${m.role}` : `confirm as ${m.role}`}
+              </Button>
+            )
+          })}
+          <Button
+            variant="primary"
+            small
+            busy={busy === `release:${pending}`}
+            disabled={Boolean(busy)}
+            onClick={() =>
+              act(`release:${pending}`, async () => {
+                await releaseApproved(members[0], ownerParty, rules.cid, proposal.cid, confirmations.map((c) => c.cid))
+                return { kind: 'text', tone: 'info', title: 'Released.' }
+              })
+            }
+          >
+            Release{met ? '' : ` on ${confirmations.length}`}
+          </Button>
+        </div>
+      )}
+      <span className="help">
+        {roleOf(proposal?.proposer ?? '') ?? members.map((m) => m.role).join(' and ')} govern this wallet, from{' '}
+        {members.length > 1 ? 'different participants' : 'one participant'}.
+      </span>
     </div>
   )
 }

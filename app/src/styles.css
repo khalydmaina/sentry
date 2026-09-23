@@ -514,3 +514,25 @@ code, pre { font-family: var(--font-data); }
   .big { font-size: 26px; }
 }
 .source .ln.target { background: var(--slab); box-shadow: inset 2px 0 0 var(--signal); }
+
+/* Shared control over a held request: the proposal, its confirmations, and
+   the release. Sits inside the held item, below the ledger's own reasons. */
+.shared-control {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid var(--rule-2);
+}
+.shared-control .members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shared-control .help {
+  flex-basis: 100%;
+  margin: 0;
+}
