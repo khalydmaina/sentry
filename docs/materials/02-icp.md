@@ -1,55 +1,48 @@
-# ICP / Audience Definition
+# ICP / Ideal Customer Profile
 
-> **What judges look for:** a segment narrow enough to name, the user and the buyer separated, the pain in their words, where to reach them, and who you are deliberately not serving.
+> **What judges look for:** a clearly defined target user and the specific pain point you solve for them. The narrower and more concrete, the better.
 
 ---
 
-## The segment
+## 1. Who they are
 
-**Digital-asset treasury and operations teams that have already automated payments, and whose limits cannot be public.**
+| | |
+| --- | --- |
+| **Segment** | Digital-asset treasury and operations teams that already run unattended payment automation and whose spending limits cannot be public. In the Canton ecosystem specifically: tokenized fund administrators, validator and node operators, wallet and payments teams, and agent infrastructure teams wiring tool-calling models to payment APIs. |
+| **Company size / stage** | 10 to 500 people. Past the point of having automated something, before the point of having built an in-house control plane for it. Series A to Series C, or an established firm's digital-asset desk. |
+| **User** | The platform or backend engineer who operates the agent. They install it, hold its credential, read the logs at 2am, and know their own `if` statement is the last line of defence. |
+| **Buyer** | The person accountable for the money: head of treasury, COO, or at a smaller firm the founder. Not evaluating Daml. Answering whether this can run overnight and whether they can say something defensible if it goes wrong. |
+| **Geography** | Wherever Canton's institutional base already is, which in practice means the US, UK, Switzerland and Singapore. Not a constraint we are choosing, just where the counterparties are. |
 
-Concretely, the first ten conversations are with organisations that are already on Canton and already run something unattended:
+## 2. Their pain
 
-- **Tokenized fund administrators and asset managers** on Canton, who run scheduled settlement, redemption and rebalancing jobs against real holdings.
-- **Validator and node operators** in the Canton ecosystem, who hold CC for fees, run automated top-ups and swaps, and are technical enough to adopt a Daml-level control.
-- **Wallet and payments teams building on Canton**, such as those shipping CIP-0103 wallets and bridges, who are being asked by their own users for delegated spending.
-- **Agent infrastructure teams** wiring tool-calling models to payment APIs, who currently implement caps in their own orchestration layer and know it is the weak point.
+- **Top pain point:** the agent holds the key, or holds a session that can use it, and every limit on it is code the agent's own process can reach. Prompt injection, a bad tool call, a compromised dependency and an ordinary bug all arrive at the same place.
+- **How often it happens:** the spending is daily to hourly. The failure is rare and unbounded, which is exactly why it is unacceptable: it is not priced into anyone's monthly loss budget.
+- **What it costs them:** on a bad day, the balance. On every other day, the automation they do not switch on, because the only safe setting is a human approving everything.
+- **How they solve it today:** caps in config, a check before submitting, a spending key with a small float topped up by hand, and a human in the loop for anything material. Some have looked at Coinbase Spend Permissions and rejected it because it publishes their limits.
 
-These are nameable. The Canton ecosystem is small enough that the validators, super-validators and wallet teams are a published list, and the hackathon itself puts several of them in one Telegram group.
+## 3. What they want
 
-## The user and the buyer are not the same person
+**Job to be done:** "When I hand an agent a wallet and go to bed, I want the limits enforced by something the agent cannot reach, so I can let routine payments settle without watching and still answer for every one of them afterwards."
 
-**The user** is the platform or backend engineer who operates the agent. They install it, hold its credential, read the logs at 2am, and are the one who notices that the only thing standing between a bad tool call and the treasury is their own `if` statement. They want a control they do not have to maintain and cannot accidentally bypass.
+- **What would make them switch:** seeing a refusal they ran themselves. `sentry-agent probe` sends four commands the agent is entitled to send and the ledger refuses all four, balance unchanged either side. That converts an engineer in about thirty seconds.
+- **What would stop them:** integration effort against an asset model that is not yet a token standard; needing a participant node they do not have; trust in a hackathon-age codebase; and for the buyer, whether the held queue fits an approval process that already exists.
 
-**The buyer** is the person accountable for the money: a head of treasury, a COO, or at a smaller firm the founder. They are not evaluating Daml. They are answering a different question, which is whether they can let this thing run overnight and say something defensible afterwards if it goes wrong.
+## 4. Where to find them
 
-Sentry has to satisfy both, and they are convinced by different artefacts. The engineer is convinced by `sentry-agent probe`, which sends four commands the agent is free to send and shows the ledger refusing all four. The buyer is convinced by the held queue and the record: every outcome, executed or refused, leaves a contract with the reason attached.
+- **Communities, events and channels:** the Canton developer community and validator operators, HackCanton itself (mentors, judges and the other entrants are the profile), Canton Foundation channels, and agent tooling communities where teams wire models to payment APIs.
+- **Tools and platforms they already rely on:** Canton validators and participant nodes, CIP-0103 wallets, Daml, and the orchestration frameworks their agents run in.
+- **Three real, nameable targets that fit:**
+  1. **BitSafe** ([bitsafe.finance](https://x.com/BitSafe_Finance)), whose Decentralization Manager we already build on and whose CBTC holders are exactly the custody-conscious profile.
+  2. **Nocturnal** ([github.com/nocturnalwallet](https://github.com/nocturnalwallet/nocturnal-canton-wallet)), a CIP-0103 browser wallet that gives users a party and a key but no way to delegate bounded spending. The missing half is us.
+  3. **Grofty** (wallet@grofty.cc), a Canton-native wallet whose users are being handed exactly this problem, and whose hackathon bounty is an open door to the conversation.
 
-## The pain, from their side
-
-From the engineer, roughly:
-
-> "The agent has the key. I have caps in config and a check before I submit. If the model gets talked into something, or a dependency I don't control gets popped, none of that matters. I'm the last line of defence and I know it."
-
-From the buyer:
-
-> "I can't let it run unattended, and I can't put our payment limits on a public chain where every counterparty can read them. So we keep a human in the loop for everything, which is most of the reason we automated it in the first place."
-
-The shape of the pain is that today's options are all-or-nothing. Either a human approves everything, which erases the value of the agent, or the agent is trusted with everything, which nobody is comfortable signing off on. Sentry's whole proposition is the middle: routine spending settles without anyone watching, and everything else waits for a signature.
-
-## Where to reach them
-
-- **The Canton ecosystem directly.** Validator and SV operators, the Canton developer community, and the wallet teams shipping CIP-0103. Small, technical, reachable, and already in the same rooms.
-- **HackCanton itself.** Mentors, judges and the other entrants are exactly the profile: 18 teams are registered, and several are building the payment, custody and fund-administration rails this sits on top of.
-- **Agent tooling communities.** Teams wiring models to payment APIs hit this problem on their first production deployment.
-- **The agent CLI as the wedge.** `sentry-agent` runs standalone and its `probe` output is a self-contained argument. It is shareable in a way a dashboard is not.
-
-## Segments we are deliberately not targeting, and why
+## 5. Who is NOT your customer (for now)
 
 - **Retail crypto users.** They do not delegate spending to software, the amounts do not justify the setup, and the privacy argument means nothing to them.
-- **Consumer AI assistants.** The spend is a few dollars of API credit. Nobody is signing a Daml policy for that.
+- **Consumer AI assistants.** The spend is a few dollars of API credit. Nobody signs a Daml policy for that.
 - **Teams on public EVM chains.** Coinbase Spend Permissions already serves them well. If publishing your caps is acceptable, that is a simpler product and we should not pretend otherwise.
-- **Anyone wanting custody or key management.** Sentry does not hold keys, and the wallet is somebody else's job. Attaching to a CIP-0103 wallet is the point.
+- **Anyone wanting custody or key management.** Sentry holds no keys. Attaching to somebody else's CIP-0103 wallet is the point, not a gap.
 - **Firms with no automation yet.** The problem only becomes urgent once something is already spending unattended. Selling to them means first selling automation, which is a different company.
 
 ## Checklist
