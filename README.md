@@ -280,7 +280,19 @@ Canton refuses a changed package with a name and version it has already seen (`K
 - Funds sent to the owner land in a second holding the policy does not track.
 - `dailyCap` bounds the total spent in a window, not the number of spends, so many tiny spends grow `recentSpends`.
 - The asset model is self-contained, not wired to Canton Coin or a token standard.
-- The outsider and stranger share the counterparty node with the bank and the merchant, so their empty views are the ledger API's per-party filter. The claim demonstrated across nodes is the bank's and the merchant's: neither participant receives the policy.
+- The outsider and stranger share the counterparty node with the bank and the merchant, so their empty views are the ledger API's per-party filter. The claim demonstrated across nodes is the bank's and the merchant's: the participant hosting them never receives the policy.
 - All three participants run in-memory, so everything is thrown away when the ledger stops.
 - A wallet-connected owner onboards with their own party, but the issuer mints on request with no checks, which is a demo faucet rather than a funding model.
 - No participant requires authentication, which is appropriate for a local demo and not for anything else.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
+
+The contracts are licensed rather than merely readable on purpose: the argument
+this project makes is that you should not trust a claim about enforcement you
+cannot check yourself, and that is a weaker invitation if reading the code is
+all anyone is permitted to do.
+
+The DARs in `governance/vendor/` are third-party and carry their own licence,
+also Apache 2.0, in `governance/vendor/LICENSE-decentralization-manager`.
