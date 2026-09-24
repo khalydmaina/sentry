@@ -79,7 +79,7 @@ function PrivacyBody() {
   if (!parties || !views || !ends) {
     return (
       <div className="panel panel-body" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <span className="blink" aria-hidden /> <span className="data body-2">Querying two participant nodes</span>
+        <span className="blink" aria-hidden /> <span className="data body-2">Querying three participant nodes</span>
       </div>
     )
   }
@@ -89,7 +89,7 @@ function PrivacyBody() {
 
   return (
     <>
-      <Banner kind={policySeenOffWallet ? 'reject' : 'allow'} title={policySeenOffWallet ? 'The policy left the wallet node.' : 'The policy never leaves the wallet node.'}>
+      <Banner kind={policySeenOffWallet ? 'reject' : 'allow'} title={policySeenOffWallet ? 'The policy reached a counterparty node.' : 'The policy never reaches a counterparty node.'}>
         {policySeenOffWallet
           ? 'A counterparty node is holding the WalletPolicy. That should not happen and is worth investigating.'
           : 'The owner is hosted by two participants and both answer for it with the policy. The third hosts the bank that issued the funds and the merchant that was paid, and never receives the policy at all: not filtered out of its answer, never delivered to it.'}

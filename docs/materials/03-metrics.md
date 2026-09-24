@@ -25,7 +25,18 @@ The core claim is that the agent cannot exceed its delegation, and that this is 
 | Raise its own caps | `DAML_AUTHORIZATION_ERROR` |
 | Mint itself a holding | `DAML_AUTHORIZATION_ERROR` |
 
-**4 of 4 refused, balance unchanged either side.** Verified against `Policy.daml`: `RequestTransfer` is the only choice with `controller agent`.
+**4 of 4 refused, balance unchanged either side at 960.00.** Verified against `Policy.daml`: `RequestTransfer` is the only choice with `controller agent`.
+
+The same agent, on the same run, using the one choice it does have, against a policy of per-transaction 100, daily 200, auto-approve 50 and an allowlist holding only the merchant:
+
+| Request | Outcome | Decided by |
+| --- | --- | --- |
+| 40 to the merchant | `EXECUTED` | under every cap, auto-approved |
+| 120 to the merchant | `HELD` | exceeds per-transaction cap |
+| 10 to the stranger | `HELD` | counterparty not allowlisted |
+| 5000 to the merchant | `REJECTED` | insufficient balance |
+
+Four requests, four different verdicts, none of them taken by the agent's own code.
 
 This is reproducible in one command by anyone with the repo, which is the point. It is not a screenshot.
 
@@ -50,23 +61,34 @@ The two survivors were real gaps, not noise:
 - **Spending exactly the balance was untested.** A `>` → `>=` slip would refuse a legitimate full-balance spend and no test would fail.
 - **A zero-amount request to an unlisted counterparty was untested.** A weakened guard would escalate it rather than abort, leaving the owner a pending approval for nothing. The existing zero-amount test used an allowlisted counterparty, where `Transfer`'s own guard catches it further down, so the test passed for the wrong reason.
 
-Both tests were written and the mutation run repeated: **7 of 7 caught.** The suite is 23 scripts.
+Both tests were written and the mutation run repeated: **7 of 7 caught.** Re-run today against the suite as it now stands, 31 scripts including the governance tests: still 7 of 7, and the contract restored clean afterwards.
 
 That is the metric worth reporting. Not "the tests pass", but "the tests were shown to fail when the contract is wrong, and where they did not, that was fixed."
 
 ## 3. Is the privacy claim true across nodes?
 
-Measured on two Canton participants sharing one synchronizer, with the same transactions settling across both:
+Measured on three Canton participants sharing one synchronizer, with the same transactions settling across all of them. Each node is asked at its own ledger end, which is why the offsets differ: sandbox 174, pebblebox 143, sidebox 171.
 
-| | wallet node `:6864` | counterparty node `:7864` |
-| --- | --- | --- |
-| `WalletPolicy` visible to | owner, agent, connected wallet | **nobody** |
-| `WalletHolding` | yes | yes |
-| `ExecutedTransfer` | yes | merchant only |
+| Template | `sandbox` owner | `sandbox` agent | `pebblebox` bank | `pebblebox` merchant | `pebblebox` stranger | `pebblebox` outsider | `sidebox` owner |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `WalletHolding` | 1 | 1 | 6 | 5 | no data | no data | 1 |
+| `WalletPolicy` | 1 | 1 | **no data** | **no data** | no data | no data | 1 |
+| `PendingApproval` | 2 | 2 | no data | no data | no data | no data | 2 |
+| `ExecutedTransfer` | 5 | 5 | no data | 5 | no data | no data | 5 |
+| `RejectedTransfer` | 1 | 1 | no data | no data | no data | no data | 1 |
+| `GovernanceRules` | 1 | no data | no data | no data | no data | no data | 1 |
+| `GovernanceExecutionResult` | 1 | no data | no data | no data | no data | no data | 1 |
 
-The bank issued the funds and the merchant was paid, and neither participant ever receives the policy. Not filtered from their answer: never delivered to that node.
+`sandbox` and `sidebox` both host the owner, so both answer for it with the policy. `pebblebox` hosts the bank that issued the funds and the merchant that was paid, and it holds no policy for any party.
 
-The Privacy page computes this from live queries rather than displaying a fixed table, and flips to a red banner if the policy ever does appear on a counterparty node. It would report its own failure.
+The sharpest version of the claim is not in the table above but in what happens when you ask the wrong node the right question: **put the query to `pebblebox` as the owner's own party and it still returns no policy.** A per-party filter would have nothing to do here, because the contract is simply not on that participant. That is the difference between privacy enforced by a view and privacy enforced by distribution.
+
+Two honest readings of the same table:
+
+- The stranger and the outsider share `pebblebox` with the bank and the merchant, so their empty columns are the ledger API's per-party filter, not a separate node. They are there to show roles, and they are not the privacy evidence.
+- `GovernedApproval`, `GovernedRejection` and `GovernanceConfirmation` are empty because the run measured here completed: reaching the threshold archives the proposal and its confirmations and leaves the execution receipt. Mid-vote, those rows fill.
+
+The Privacy page computes all of this from live queries rather than displaying a fixed table, and flips to a red banner if the policy ever does appear on a counterparty node. It would report its own failure.
 
 ## 4. Does it behave under contention?
 
@@ -74,14 +96,34 @@ Two requests submitted simultaneously against the same policy: the ledger serial
 
 This matters because the rolling cap is only meaningful if two concurrent requests cannot both consume the same headroom.
 
-## 5. Numbers as they stand
+## 5. Does shared control actually hold?
+
+Releasing a held request is governed by BitSafe's Decentralization Manager with two members and a threshold of two. Alice is hosted by `sandbox` and Bob by `sidebox`, so the two confirmations come from parties that no single participant speaks for.
+
+Measured live, in this order:
+
+| Step | Result |
+| --- | --- |
+| Agent requests 120 | `HELD`, waiting on the owner |
+| Alice proposes a release, Alice confirms | 1 of 2 |
+| Release attempted on one confirmation | **REFUSED by the ledger** |
+| Bob confirms, from `sidebox` | 2 of 2 |
+| Release on two | `SETTLED`, merchant 40.00 to 160.00 |
+
+The refusal in the middle is the measurement. Nothing in our code counts confirmations, for the same reason nothing in the agent's client checks a spending cap.
+
+Separately, the owner party is hosted on two participants with a hosting threshold of one, so losing a host is survivable rather than fatal. Taking `sidebox` off the synchronizer, spending as the owner, and bringing it back: the owner could spend at every step, and the node reconnected.
+
+## 6. Numbers as they stand
 
 | Measure | Value |
 | --- | --- |
-| Daml scripts passing | 23 |
+| Daml scripts passing | 31 (25 tests, 6 that allocate parties or set up the demo) |
 | Mutants caught | 7 of 7 (was 5 of 7 before two tests were added) |
-| Agent capabilities refused by the ledger | 4 of 4 |
-| Participants the policy reaches | 1 of 2 |
+| Agent capabilities refused by the ledger | 4 of 4, live, balance 960.00 either side |
+| Participants that hold the policy | 2 of 3, both of them hosts of the owner |
+| Participants a counterparty is hosted by that hold it | 0 of 1 |
+| Confirmations needed to release a held request | 2, from parties on different participants |
 | User interviews conducted | **0** |
 
 ## What would change my mind

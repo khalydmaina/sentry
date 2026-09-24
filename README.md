@@ -33,7 +33,7 @@ scripts/host-owner.sc           Hosts the owner party on two of them
 scripts/governance-setup.py     Two members, threshold two
 scripts/governance-demo.py      A release that needs both signatures
 scripts/outage-demo.py          What losing a host does
-scripts/ledger.sh               Both participants, package upload, demo parties
+scripts/ledger.sh               All three participants, package upload, demo parties
 scripts/mutants.sh              Breaks the policy rules on purpose, checks the tests notice
 ```
 
@@ -105,9 +105,9 @@ varying between runs, which is why `scripts/connect-all.sc` exists.
 
 `founder` is nobody's demo role. It stands in for a person arriving with their own wallet and their own party, owning nothing, and is the party a connected wallet acts as.
 
-Two nodes is the point. The privacy page asks each participant what it holds, so "the bank cannot see the policy" is a fact about a separate node rather than a filter applied to one node's answer. The desk then walks through creating the wallet: the bank mints the holding on its own node and the owner signs the policy on theirs. Ctrl-C the script to throw both ledgers away.
+Separate nodes are the point. The privacy page asks each participant what it holds, so "the bank cannot see the policy" is a fact about a separate node rather than a filter applied to one node's answer. The desk then walks through creating the wallet: the bank mints the holding on its own node and the owner signs the policy on theirs. Ctrl-C the script to throw all three ledgers away.
 
-The first transaction across the two participants takes noticeably longer than the rest while the nodes exchange topology. Later ones settle in well under a second.
+The first transaction across participants takes noticeably longer than the rest while the nodes exchange topology. Later ones settle in well under a second.
 
 Pages:
 
@@ -281,6 +281,6 @@ Canton refuses a changed package with a name and version it has already seen (`K
 - `dailyCap` bounds the total spent in a window, not the number of spends, so many tiny spends grow `recentSpends`.
 - The asset model is self-contained, not wired to Canton Coin or a token standard.
 - The outsider and stranger share the counterparty node with the bank and the merchant, so their empty views are the ledger API's per-party filter. The claim demonstrated across nodes is the bank's and the merchant's: neither participant receives the policy.
-- Both participants run in-memory, so everything is thrown away when the ledger stops.
+- All three participants run in-memory, so everything is thrown away when the ledger stops.
 - A wallet-connected owner onboards with their own party, but the issuer mints on request with no checks, which is a demo faucet rather than a funding model.
-- Neither participant requires authentication, which is appropriate for a local demo and not for anything else.
+- No participant requires authentication, which is appropriate for a local demo and not for anything else.
