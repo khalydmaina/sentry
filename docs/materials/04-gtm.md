@@ -53,7 +53,7 @@ Every row is a hypothesis. None has been tested.
 
 ## 5. Business model
 
-- **Who pays, and for what:** not the enforcement. The contracts are open source and should stay that way, because the whole argument is that anyone can check them. What is worth paying for is the operational layer: hosted participants, the approval experience, policy management across many agents, and reporting.
+- **Who pays, and for what:** not the enforcement. The contracts are Apache 2.0 and should stay that way, because the whole argument is that anyone can check them, and an invitation to check is weaker if reading is all anyone is permitted to do. What is worth paying for is the operational layer: hosted participants, the approval experience, policy management across many agents, and reporting.
 - **Pricing hypothesis:** per-agent monthly for policy management and approvals, with the contracts free forever. Untested, and deliberately not modelled in detail before the first ten conversations.
 - **Revenue on Canton:** B2B licensing of the operational layer, and Featured App rewards if this reaches that bar. Not transaction fees: taking a cut of a payment the owner is already making would be charging for the part we want everyone to inspect.
 - **Why now:** the agents and the rails arrived together, and the control layer between them did not.
