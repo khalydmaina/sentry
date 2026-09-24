@@ -10,18 +10,18 @@
 | --- | --- |
 | Repository | https://github.com/khalydmaina/sentry |
 | Track | Real-World Assets (RWA) & Business Workflows |
-| Runs on | Canton LocalNet, two participants on one synchronizer |
+| Runs on | Canton LocalNet, three participants on one synchronizer |
 
 Everything below runs from a clean checkout. Nothing is mocked, simulated or pre-recorded: the frontend has no fallback data and says so when the ledger is unreachable.
 
 ## Run it
 
 ```sh
-./scripts/ledger.sh                    # two Canton participants, DAR uploaded to both
+./scripts/ledger.sh                    # three Canton participants, packages uploaded to all three
 cd app && npm install && npm run dev   # http://localhost:5173
 ```
 
-The ledger script starts participant `sandbox` on 6864 and `pebblebox` on 7864, waits for both to join the synchronizer, uploads the package to each, and allocates every party on the node that hosts it.
+The ledger script starts `sandbox` on 6864, `pebblebox` on 7864 and `sidebox` on 8864, waits for all three to join the synchronizer, uploads the packages to each, and allocates every party on the node that hosts it. The owner is hosted on `sandbox` and `sidebox` and deliberately not on `pebblebox`, so one topology shows both that the owner survives losing a host and that the counterparty's node still never receives the policy.
 
 ## The workflow, end to end
 
@@ -70,23 +70,30 @@ Four commands the agent is perfectly free to send, refused by the contracts, bal
 
 ### 2. Privacy is demonstrated across nodes, not asserted
 
-The Privacy page queries each participant for what it holds, at that node's own offset:
+The Privacy page queries each participant for what it holds, at that node's own offset. Measured live on the three-node network:
 
 ```
-                  sandbox :6864              pebblebox :7864
-                  owner   agent   founder    bank   merchant   stranger  outsider
-WalletHolding     ✓       ✓       ✓          ✓      ✓          ✓         no data
-WalletPolicy      ✓       ✓       ✓          no data  no data  no data   no data
-ExecutedTransfer  no data ✓       ✓          no data  ✓        ✓         no data
+                           sandbox :6864    pebblebox :7864                        sidebox :8864
+                           owner   agent    bank  merchant  stranger  outsider     owner (2nd host)
+WalletHolding              1       1        6     5         no data   no data      1
+WalletPolicy               1       1        no data no data no data   no data      1
+PendingApproval            2       2        no data no data no data   no data      2
+ExecutedTransfer           5       5        no data 5       no data   no data      5
+RejectedTransfer           1       1        no data no data no data   no data      1
+GovernanceRules            1       no data  no data no data no data   no data      1
+GovernanceExecutionResult  1       no data  no data no data no data   no data      1
 ```
 
-The bank issued the funds and the merchant was paid, and **neither participant ever receives the `WalletPolicy`**. It is not filtered out of their answer, it was never delivered to that node. The banner on that page is computed from the data, so it turns red and says so if the policy ever does reach a counterparty node.
+The bank issued the funds and the merchant was paid, and **`pebblebox` never receives the `WalletPolicy` at all**. Ask it as the owner's own party and it still returns nothing, because a per-party filter has nothing to do when the contract was never delivered to that participant. Meanwhile `sidebox`, the owner's second host, answers with the policy exactly as `sandbox` does.
+
+The banner on that page is computed from the data, so it turns red and says so if the policy ever does reach a counterparty node.
 
 ## Depth of Canton integration
 
 - **Daml is the enforcement**, not a record of decisions made elsewhere. Caps, allowlist, rolling window and escalation are all inside `RequestTransfer`.
 - **`RequestTransfer` is nonconsuming** so that escalations and rejections never archive the policy, and only the branch that moves money replaces it. Two concurrent requests contend correctly: the loser gets `LOCAL_VERDICT_LOCKED_CONTRACTS` and succeeds on resubmission.
-- **Two participants on one synchronizer**, with the same transaction settling across both.
+- **Three participants on one synchronizer**, with the same transaction settling across them, and the owner party hosted on two of them.
+- **Shared control over the held queue.** Clearing a held request is a governed action needing two confirmations from parties on different participants, built on BitSafe's Decentralization Manager rather than a threshold rule of our own.
 - **JSON Ledger API v2** throughout, with package-name template references.
 - **CIP-0103 wallet identity.** Provider discovery on both `canton:announceProvider` and `window.cantonWallet`, `prepareExecuteAndWait` for generic Daml commands, events read back through `ledgerApi`, and disclosed contracts with all four required fields, because a wallet submits through a validator that has never seen these contracts.
 - **No `actAs` anywhere on the wallet path**, since a wallet submits only as its connected party.
@@ -97,9 +104,9 @@ Listed in full in the README. The ones that matter to a judge:
 
 - The asset model is self-contained rather than wired to Canton Coin or a token standard.
 - The issuer mints on request with no checks, which is a demo faucet, not a funding model.
-- Both participants run in memory, so state is thrown away when the ledger stops.
-- Neither participant requires authentication, which is right for a local demo and nothing else.
-- The Grofty integration runs against a stand-in CIP-0103 provider. Grofty is MainNet-only and invitation-gated, and access was requested during the hackathon.
+- All three participants run in memory, so state is thrown away when the ledger stops.
+- No participant requires authentication, which is right for a local demo and nothing else.
+- The Grofty integration runs against a stand-in CIP-0103 provider. Grofty is MainNet-only and invitation-gated, so an end-to-end demo on their wallet depends on access we do not have yet.
 
 ## Provenance
 

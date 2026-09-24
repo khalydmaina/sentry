@@ -27,6 +27,7 @@ export type TemplateName =
   | 'GovernedApproval'
   | 'GovernedRejection'
   | 'GovernanceConfirmation'
+  | 'GovernanceExecutionResult'
 
 /**
  * The rows of the privacy matrix, in two groups.
@@ -37,7 +38,17 @@ export type TemplateName =
  * and confirmations.
  */
 export const TEMPLATE_NAMES: TemplateName[] = ['WalletHolding', 'WalletPolicy', 'PendingApproval', 'ExecutedTransfer', 'RejectedTransfer']
-export const GOVERNANCE_TEMPLATE_NAMES: TemplateName[] = ['GovernanceRules', 'GovernedApproval', 'GovernedRejection', 'GovernanceConfirmation']
+// `GovernanceExecutionResult` is the library's own receipt, left behind once a
+// proposal reaches its threshold and executes. It is a row because the page
+// claims to show what each node holds, and after a release this is the only
+// governance contract still active.
+export const GOVERNANCE_TEMPLATE_NAMES: TemplateName[] = [
+  'GovernanceRules',
+  'GovernedApproval',
+  'GovernedRejection',
+  'GovernanceConfirmation',
+  'GovernanceExecutionResult',
+]
 
 export function templateName(templateId: string): string {
   return templateId.split(':').pop() ?? templateId

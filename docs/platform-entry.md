@@ -18,8 +18,15 @@ a policy, request a transfer, settle or escalate or reject, leave a record.
 
 ## Sponsor challenges
 
+BitSafe / Decentralization Manager. Releasing a held request is a governed
+action: two members, a threshold of two, and confirmations from parties hosted
+by different participants. The threshold lives in BitSafe's `GovernanceRules`,
+which refuses to execute below it, so nothing in our code counts confirmations.
+
 Grofty Wallet Bounty. The owner and agent connect with Grofty, and signing the
-policy and approving a held request happen with keys the owner holds.
+policy and approving a held request happen with keys the owner holds. Grofty is
+MainNet-only and invitation-gated, so this runs against a stand-in CIP-0103
+provider until access is granted.
 
 ## Elevator pitch
 
@@ -41,7 +48,7 @@ record.
 
 ## Tech stack
 
-Daml, Canton, JSON Ledger API, dpm, React, TypeScript, Vite, LocalNet
+Daml, Canton, JSON Ledger API, dpm, Decentralization Manager, React, TypeScript, Vite, LocalNet
 
 ## Contact
 
