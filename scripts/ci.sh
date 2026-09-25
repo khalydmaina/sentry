@@ -35,8 +35,11 @@ section "Ledger: three Canton participants on one synchronizer"
 LEDGER=$!
 stop() {
   kill "$LEDGER" 2>/dev/null
-  # ledger.sh kills its sandbox on exit; make sure nothing outlives the run.
+  # Killing ledger.sh does not reach the Canton JVM: dpm hands the sandbox to
+  # a java process outside that tree, which Ctrl-C only reaches because it
+  # signals the whole terminal. Stop it by its own command line.
   pkill -f "dpm sandbox" 2>/dev/null
+  pkill -f "canton-open-source.*three-node.conf" 2>/dev/null
   wait 2>/dev/null
 }
 trap stop EXIT
@@ -49,7 +52,7 @@ until grep -q "Ledger ready." "$OUT/ledger.out"; do
   sleep 5
 done
 sed -n '/Ledger ready./,$p' "$OUT/ledger.out" | grep -v "Ctrl-C"
-pass "ready in $(( $(date +%s) - started ))s"
+echo "  ready in $(( $(date +%s) - started ))s"
 
 section "Privacy: which node holds the policy"
 python3 "$ROOT/scripts/hosting-check.py" | tee "$OUT/privacy.out"
