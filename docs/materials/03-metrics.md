@@ -130,6 +130,7 @@ The refusal in the middle is the measurement. Separately, the owner party is hos
 | Active parties in the demo topology | allocated across three participants | **8** | 8 |
 | Daml scripts passing | `dpm test` | **31** (25 tests, 6 setup) | 31+ |
 | Mutants caught | `scripts/mutants.sh` | **7 of 7** | 7 of 7 |
+| Claims checked on a machine that is not the author's | `scripts/ci.sh` on a clean GitHub runner, every push | **14 of 14** | 14 of 14 |
 
 We have no analytics on the site and are not adding any. Counting demo users by asking three people is a smaller and truer number than counting page views.
 
