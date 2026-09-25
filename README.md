@@ -4,7 +4,60 @@
 
 Spending limits an AI agent cannot argue with, enforced by Canton's ledger instead of wallet software. The owner signs a `WalletPolicy` delegating limited authority to an agent. `RequestTransfer` is the agent's only way to move funds: in-policy spends execute immediately, anything else becomes a `PendingApproval` for the owner, and insufficient balance is rejected. The policy is visible only to the owner and the agent.
 
-HackCanton Season 3 entry.
+HackCanton Season 3 entry. Live explainer: https://sentry-canton.vercel.app
+
+## Test it yourself
+
+You need Linux or WSL2 (CI runs Ubuntu 24.04; macOS is untested), git, JDK 17+,
+Python 3, Node 20.19+, about 4 GB of free memory and 5 GB of disk.
+
+**1. Install the Daml SDK, version 3.5.8.** Pass the version: without it the
+installer fetches the newest SDK, and the build then stops with
+`SDK_NOT_INSTALLED`. It is a download of about 3 GB, so allow some time.
+
+```sh
+curl -sSL https://get.digitalasset.com/install/install.sh | sh -s 3.5.8
+export PATH="$HOME/.dpm/bin:$PATH"
+```
+
+If you already have a newer SDK, `dpm install 3.5.8` adds the pinned one alongside it.
+
+On a slow or flaky connection, read the end of the install output. A dropped
+download prints `connection reset` or `failed to copy content`, yet `dpm version`
+still lists 3.5.8 afterwards, and running the install again does not repair the
+half-downloaded parts. Delete `~/.dpm` and run the install command again from
+the start.
+
+**2. Check every claim with one command.**
+
+```sh
+git clone https://github.com/khalydmaina/sentry && cd sentry
+./scripts/ci.sh
+```
+
+It runs the Daml tests, starts three Canton participants, creates a wallet,
+sends the agent's four requests and the four forbidden commands, checks which
+node holds the policy, runs a governed release and takes a host offline. Each
+check prints `PASS` or `FAIL`, and it ends with `Every claim held.` Expect
+roughly 5 to 10 minutes, most of it the ledger starting. It stops the ledger
+when it finishes. This is the same script
+[CI](https://github.com/khalydmaina/sentry/actions/workflows/ci.yml) runs on
+every push.
+
+**3. Or poke at it by hand.** Two terminals:
+
+```sh
+./scripts/ledger.sh                         # terminal 1: wait for "Ledger ready." (2 to 5 minutes)
+```
+
+```sh
+python3 scripts/hosting-check.py            # terminal 2: creates a wallet, prints who holds the policy
+node agent/sentry-agent.mjs request --amount 40 --to merchant
+node agent/sentry-agent.mjs probe           # 4 of 4 refused, balance unchanged
+cd app && npm install && npm run dev        # the desk, at http://localhost:5173
+```
+
+Ctrl-C in terminal 1 throws the whole ledger away. Start it again for a clean one.
 
 ## Provenance
 
@@ -46,8 +99,9 @@ scripts/ci.sh                   Every claim in this README, checked against a li
 ## Prerequisites
 
 - JDK 17+ (developed on Temurin 21)
-- Daml SDK via dpm: `curl https://get.digitalasset.com/install/install.sh | sh`, then add `~/.dpm/bin` to `PATH`
-- Node 20.19+ for the frontend
+- Daml SDK 3.5.8 via dpm: `curl -sSL https://get.digitalasset.com/install/install.sh | sh -s 3.5.8`, then add `~/.dpm/bin` to `PATH`
+- Python 3, used by the ledger script
+- Node 20.19+ for the frontend and the agent
 
 ## Run the demo
 
@@ -217,7 +271,8 @@ Manager at Apache-2.0, with the licence alongside them.
 
 The desk shows both seats in one page, which is convenient and misleading: a
 real agent runs somewhere you do not control. `agent/sentry-agent.mjs` is that
-agent, with its own credential and no dependencies beyond Node.
+agent, with its own credential and no dependencies beyond Node. It needs a
+wallet to act on: create one on the desk, or with `python3 scripts/hosting-check.py`.
 
 ```sh
 node agent/sentry-agent.mjs status

@@ -19,6 +19,14 @@ A judge does not have to take that on trust or install anything. Every push runs
 
 ## Run it
 
+Setup, including the one SDK detail that trips people up (install version 3.5.8, not the latest), is in the README under [Test it yourself](https://github.com/khalydmaina/sentry#test-it-yourself). The fastest check is one command, which prints `PASS` or `FAIL` per claim:
+
+```sh
+./scripts/ci.sh
+```
+
+To explore by hand:
+
 ```sh
 ./scripts/ledger.sh                    # three Canton participants, packages uploaded to all three
 cd app && npm install && npm run dev   # http://localhost:5173
