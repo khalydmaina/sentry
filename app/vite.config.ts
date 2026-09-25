@@ -1,9 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
 
 // The Canton JSON API sends no CORS headers, so the dev server proxies it.
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    // The dApp SDK imports WalletConnect unconditionally although it is an
+    // optional peer. Sentry connects through extensions only; see the stub.
+    alias: { '@walletconnect/sign-client': fileURLToPath(new URL('./src/ledger/noWalletConnect.ts', import.meta.url)) },
+  },
   server: {
     port: 5173,
     // Three participant nodes on one synchronizer. `/v2` is the wallet node,

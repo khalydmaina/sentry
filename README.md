@@ -1,5 +1,7 @@
 # sentry
 
+[![ci](https://github.com/khalydmaina/sentry/actions/workflows/ci.yml/badge.svg)](https://github.com/khalydmaina/sentry/actions/workflows/ci.yml)
+
 Spending limits an AI agent cannot argue with, enforced by Canton's ledger instead of wallet software. The owner signs a `WalletPolicy` delegating limited authority to an agent. `RequestTransfer` is the agent's only way to move funds: in-policy spends execute immediately, anything else becomes a `PendingApproval` for the owner, and insufficient balance is rejected. The policy is visible only to the owner and the agent.
 
 HackCanton Season 3 entry.
@@ -35,6 +37,8 @@ scripts/governance-demo.py      A release that needs both signatures
 scripts/outage-demo.py          What losing a host does
 scripts/ledger.sh               All three participants, package upload, demo parties
 scripts/mutants.sh              Breaks the policy rules on purpose, checks the tests notice
+scripts/ci.sh                   Every claim in this README, checked against a live ledger
+.github/workflows/ci.yml        Runs ci.sh and the mutants on a clean GitHub runner
 ```
 
 `main` is the package deployed to the ledger. `test` holds scripts only, so `daml-script` never ships.
@@ -104,6 +108,26 @@ the sandbox's built-in bootstrap connects some participants and not others,
 varying between runs, which is why `scripts/connect-all.sc` exists.
 
 `founder` is nobody's demo role. It stands in for a person arriving with their own wallet and their own party, owning nothing, and is the party a connected wallet acts as.
+
+### Connecting a wallet
+
+The owner can sign with a CIP-0103 wallet instead of the sandbox's demo user.
+Wallets are found three ways, in `app/src/ledger/identity.ts`:
+
+- **Canton's dApp SDK protocol.** The extension announces `{ id, name, target }`
+  on `canton:announceProvider` and talks over `window.postMessage`. Sentry hands
+  the announcement to the SDK's own `ExtensionAdapter`
+  (`@canton-network/dapp-sdk`), which owns that transport and its handshake, so
+  any wallet built on the SDK works without code of ours. The SDK is loaded only
+  when such a wallet announces itself.
+- An announcement carrying a callable provider, the EIP-6963 shape.
+- An object injected at `window.cantonWallet`.
+
+Commands go through `prepareExecuteAndWait` and are read back through the
+wallet's `ledgerApi`, never with `actAs`. On LocalNet, `?wallet=mock` in a dev
+build installs a stand-in wallet that speaks the SDK protocol and forwards to
+the sandbox as `founder` (`?wallet=mock-injected` for the older shape). It
+proves the plumbing, not signing: it holds no key.
 
 Separate nodes are the point. The privacy page asks each participant what it holds, so "the bank cannot see the policy" is a fact about a separate node rather than a filter applied to one node's answer. The desk then walks through creating the wallet: the bank mints the holding on its own node and the owner signs the policy on theirs. Ctrl-C the script to throw all three ledgers away.
 
@@ -273,6 +297,34 @@ It restores the contract with `git checkout`, so an interrupted run cannot leave
 
 Canton refuses a changed package with a name and version it has already seen (`KNOWN_PACKAGE_VERSION`). After editing Daml, restart the ledger script or bump `version` in the relevant `daml.yaml`.
 
+## Checked on every push
+
+A claim that holds on the author's laptop is a weaker claim.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs
+[`scripts/ci.sh`](scripts/ci.sh) on a clean GitHub runner: it installs the SDK,
+boots the three participants, and fails if any answer differs from what this
+README says.
+
+```
+PASS  31 scripts pass, 0 fail
+PASS  sandbox (hosts the owner) holds the policy
+PASS  sidebox (second host) holds the policy
+PASS  pebblebox never received the policy, even asked as the owner
+PASS  the bank sees its holding and not the policy
+PASS  40 to merchant executes
+PASS  120 to merchant is held
+PASS  10 to stranger is held
+PASS  5000 to merchant is rejected
+PASS  4 of 4 refused with DAML_AUTHORIZATION_ERROR
+PASS  balance 960.00 before and after
+PASS  refused at 1 of 2
+PASS  settled at 2 of 2
+PASS  owner could spend throughout
+```
+
+A second job runs the mutants. The same script runs locally with
+`./scripts/ci.sh`; it leaves its outputs in `.ci/`.
+
 ## Known limitations
 
 - The issuer can archive a holding directly, which leaves `policy.holding` pointing at a dead contract until `UpdatePolicy` repoints it.
@@ -284,6 +336,7 @@ Canton refuses a changed package with a name and version it has already seen (`K
 - All three participants run in-memory, so everything is thrown away when the ledger stops.
 - A wallet-connected owner onboards with their own party, but the issuer mints on request with no checks, which is a demo faucet rather than a funding model.
 - No participant requires authentication, which is appropriate for a local demo and not for anything else.
+- No real wallet extension has signed against Sentry yet; the wallet path is exercised with the stand-in described under Connecting a wallet.
 
 ## License
 

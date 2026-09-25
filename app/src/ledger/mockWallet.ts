@@ -6,8 +6,13 @@
  * contract as closely as a mock can, so the app's identity path is the real
  * one rather than a convenient fiction:
  *
- *   - announces itself on `canton:announceProvider` AND injects at
- *     `window.cantonWallet`, the two ways wallets are actually found
+ *   - `?wallet=mock` behaves like an extension built on Canton's dApp SDK:
+ *     it announces `{ id, name, target }`, answers the READY/ACK handshake,
+ *     and serves JSON-RPC over `window.postMessage`. The app reaches it
+ *     through the SDK's own ExtensionAdapter, so that transport is exercised
+ *     end to end.
+ *   - `?wallet=mock-injected` is the older shape: a callable provider in the
+ *     announcement and at `window.cantonWallet`.
  *   - `prepareExecuteAndWait` answers `{ tx: { payload: { updateId } } }`,
  *     an update id rather than a ledger transaction
  *   - `ledgerApi` is read-only and serves only the documented paths
@@ -15,15 +20,17 @@
  *   - unknown methods fail with -32601, so fallbacks are exercised
  *
  * What it does NOT do is hold a key. It forwards to the local sandbox as the
- * owner's demo user, so it proves the plumbing and nothing about signing.
+ * founder's demo user, so it proves the plumbing and nothing about signing.
  *
- * Enabled only in a dev build, and only with `?wallet=mock` in the URL.
+ * Enabled only in a dev build, and only with one of those URL parameters.
  */
 
 import { ledgerEnd, submit as submitAsUser, userParty, type Command, type Transaction } from './api'
 import { ANNOUNCE_EVENT, INVALID_PARAMS, METHOD_UNSUPPORTED, REQUEST_EVENT } from './identity'
 
 const INFO = { uuid: 'mock-cip0103-dev', name: 'Mock wallet (dev)', rdns: 'local.sentry.mock' }
+/** The postMessage routing key, as an extension would use its runtime id. */
+const TARGET = 'sentry-mock-wallet'
 
 /** Stands in for someone reading the request and approving it in the extension. */
 const APPROVAL_MS = 400
@@ -35,7 +42,7 @@ const fail = (code: number, message: string) => {
 /** Visible to headless tests so the disclosure path can actually be asserted. */
 const mockLog: string[] = []
 
-export function installMockWallet(): void {
+export function installMockWallet(transport: 'extension' | 'injected' = 'extension'): void {
   let party: string | null = null
   const submitted = new Map<string, Transaction>()
 
@@ -129,9 +136,37 @@ export function installMockWallet(): void {
     },
   }
 
-  const announce = () => window.dispatchEvent(new CustomEvent(ANNOUNCE_EVENT, { detail: { info: INFO, provider } }))
-  window.addEventListener(REQUEST_EVENT, announce)
-  ;(window as { cantonWallet?: unknown }).cantonWallet = provider
   ;(window as { __mockWalletLog?: string[] }).__mockWalletLog = mockLog
-  announce()
+
+  if (transport === 'injected') {
+    const announce = () => window.dispatchEvent(new CustomEvent(ANNOUNCE_EVENT, { detail: { info: INFO, provider } }))
+    window.addEventListener(REQUEST_EVENT, announce)
+    ;(window as { cantonWallet?: unknown }).cantonWallet = provider
+    announce()
+    return
+  }
+
+  // The dApp SDK's extension protocol. Messages are addressed by `target`, and
+  // one aimed at a different extension is not ours to answer.
+  window.addEventListener(REQUEST_EVENT, () =>
+    window.dispatchEvent(new CustomEvent(ANNOUNCE_EVENT, { detail: { id: TARGET, name: INFO.name, target: TARGET } })),
+  )
+  window.addEventListener('message', async (event: MessageEvent) => {
+    const m = event.data as { type?: string; target?: string; request?: { id?: string | number; method: string; params?: unknown } }
+    if (event.source !== window || (m?.target && m.target !== TARGET)) return
+    if (m?.type === 'SPLICE_WALLET_EXT_READY') {
+      window.postMessage({ type: 'SPLICE_WALLET_EXT_ACK', target: TARGET }, '*')
+      return
+    }
+    if (m?.type !== 'SPLICE_WALLET_REQUEST' || !m.request || m.request.id == null) return
+    const { id, method, params } = m.request
+    let response
+    try {
+      response = { jsonrpc: '2.0', id, result: await provider.request({ method, params }) }
+    } catch (err) {
+      const e = err as { code?: number; message?: string }
+      response = { jsonrpc: '2.0', id, error: { code: e.code ?? -32603, message: e.message ?? String(err) } }
+    }
+    window.postMessage({ type: 'SPLICE_WALLET_RESPONSE', response }, '*')
+  })
 }

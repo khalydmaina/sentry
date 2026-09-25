@@ -11,8 +11,11 @@
 | Repository | https://github.com/khalydmaina/sentry |
 | Track | Real-World Assets (RWA) & Business Workflows |
 | Runs on | Canton LocalNet, three participants on one synchronizer |
+| Checked on | every push, on a clean GitHub runner: [ci.yml](https://github.com/khalydmaina/sentry/actions/workflows/ci.yml) |
 
 Everything below runs from a clean checkout. Nothing is mocked, simulated or pre-recorded: the frontend has no fallback data and says so when the ledger is unreachable.
+
+A judge does not have to take that on trust or install anything. Every push runs `scripts/ci.sh` on a fresh GitHub runner: it installs the Daml SDK, boots the three participants, and fails if any result below differs from what this page says. A second job breaks the policy rules seven ways and fails if the tests miss one.
 
 ## Run it
 
@@ -95,7 +98,7 @@ The banner on that page is computed from the data, so it turns red and says so i
 - **Three participants on one synchronizer**, with the same transaction settling across them, and the owner party hosted on two of them.
 - **Shared control over the held queue.** Clearing a held request is a governed action needing two confirmations from parties on different participants, built on BitSafe's Decentralization Manager rather than a threshold rule of our own.
 - **JSON Ledger API v2** throughout, with package-name template references.
-- **CIP-0103 wallet identity.** Provider discovery on both `canton:announceProvider` and `window.cantonWallet`, `prepareExecuteAndWait` for generic Daml commands, events read back through `ledgerApi`, and disclosed contracts with all four required fields, because a wallet submits through a validator that has never seen these contracts.
+- **CIP-0103 wallet identity.** Discovery through Canton's own dApp SDK (`@canton-network/dapp-sdk`, its `ExtensionAdapter` over `window.postMessage`), so any wallet built on the SDK connects without code of ours, plus the older callable-provider announcement and `window.cantonWallet`; `prepareExecuteAndWait` for generic Daml commands, events read back through `ledgerApi`, and disclosed contracts with all four required fields, because a wallet submits through a validator that has never seen these contracts.
 - **No `actAs` anywhere on the wallet path**, since a wallet submits only as its connected party.
 
 ## Honest limitations
@@ -106,6 +109,7 @@ Listed in full in the README. The ones that matter to a judge:
 - The issuer mints on request with no checks, which is a demo faucet, not a funding model.
 - All three participants run in memory, so state is thrown away when the ledger stops.
 - No participant requires authentication, which is right for a local demo and nothing else.
+- No real wallet extension has signed against Sentry yet. The wallet path is exercised with a stand-in that speaks the dApp SDK's extension protocol, through the SDK's own adapter, so what is proven is the plumbing and not a key.
 - The Grofty integration runs against a stand-in CIP-0103 provider. Grofty is MainNet-only and invitation-gated, so an end-to-end demo on their wallet depends on access we do not have yet.
 
 ## Provenance
