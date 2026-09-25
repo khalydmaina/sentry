@@ -1,0 +1,82 @@
+# Checks the project's claims on a machine that is not the author's.
+#
+# `claims` boots three Canton participants on a clean runner and runs
+# scripts/ci.sh: the Daml suite, four agent requests, the probe, the privacy
+# check across nodes, shared control and a host outage. `mutants` breaks the
+# policy rules one at a time and fails if the suite does not notice.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DPM_SDK_VERSION: 3.5.8
+  TERM: dumb
+
+jobs:
+  claims:
+    name: Every claim, on a live three-node ledger
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install the Daml SDK
+        run: |
+          curl -sSL https://get.digitalasset.com/install/install.sh | sh -s "$DPM_SDK_VERSION"
+          echo "$HOME/.dpm/bin" >> "$GITHUB_PATH"
+
+      - name: Check the SDK installed completely
+        run: dpm version | grep -F "$DPM_SDK_VERSION"
+
+      - name: Run every claim
+        run: ./scripts/ci.sh
+
+      - name: Keep the ledger logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-logs
+          path: |
+            .ci/
+            .ledger/*.out
+            .ledger/log/
+          retention-days: 14
+
+  mutants:
+    name: Seven deliberate bugs, each caught by the tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install the Daml SDK
+        run: |
+          curl -sSL https://get.digitalasset.com/install/install.sh | sh -s "$DPM_SDK_VERSION"
+          echo "$HOME/.dpm/bin" >> "$GITHUB_PATH"
+
+      - name: Check the SDK installed completely
+        run: dpm version | grep -F "$DPM_SDK_VERSION"
+
+      - name: Run the mutants
+        run: ./scripts/mutants.sh
