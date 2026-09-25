@@ -62,7 +62,7 @@ GitHub Actions, LocalNet
 | Field | Value |
 | --- | --- |
 | `githubRepoUrl` | https://github.com/khalydmaina/sentry |
-| `demoUrl` | https://sentry-khalid-maina-s-projects.vercel.app (public since 25 Sep 2026; the desk explains that the ledger runs locally) |
+| `demoUrl` | https://sentry-canton.vercel.app (public since 25 Sep 2026; the desk explains that the ledger runs locally) |
 | `demoVideoUrl` | optional, and not required by this hackathon. Leave blank unless a recording exists. |
 
 ## logo
