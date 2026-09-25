@@ -8,18 +8,19 @@
 # Restore is `git checkout`, so even a hard kill cannot leave a mutant behind.
 set -uo pipefail
 
-ROOT="$HOME/sentry"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REL="main/daml/Wallet/Policy.daml"
 SRC="$ROOT/$REL"
 export PATH="$HOME/.dpm/bin:$PATH"
 
 restore() { (cd "$ROOT" && git checkout -- "$REL"); }
-trap restore EXIT INT TERM
+OUT="$(mktemp)"
+trap 'restore; rm -f "$OUT"' EXIT INT TERM
 
 run_suite() {
   (cd "$ROOT" && dpm build --all > /dev/null 2>&1) || return 1
-  (cd "$ROOT/test" && dpm test > /tmp/mut.out 2>&1) || return 1
-  grep -qE ": ok," /tmp/mut.out && ! grep -qiE "FAILURE|Aborted|test failed" /tmp/mut.out
+  (cd "$ROOT/test" && dpm test > "$OUT" 2>&1) || return 1
+  grep -qE ": ok," "$OUT" && ! grep -qiE "FAILURE|Aborted|test failed" "$OUT"
 }
 
 mutate() { # find replace
@@ -61,13 +62,14 @@ declare -a REPL=(
   'subTime now t <= p.windowLength'
 )
 
-caught=0; total=0
+caught=0; total=0; skipped=0
 printf "%-34s | %s\n" "mutant" "result"
 printf -- "-----------------------------------|--------\n"
 for i in "${!NAMES[@]}"; do
   restore
   if ! mutate "${FIND[$i]}" "${REPL[$i]}"; then
     printf "%-34s | SKIPPED (pattern not found)\n" "${NAMES[$i]}"
+    skipped=$((skipped+1))
     continue
   fi
   total=$((total+1))
@@ -84,3 +86,5 @@ restore
 echo
 echo "$caught of $total mutants caught"
 (cd "$ROOT" && git diff --quiet -- "$REL" && echo "contract restored clean" || echo "WARNING: contract still modified")
+# A skipped mutant means the contract changed under it: that is a failure too.
+[ "$caught" -eq "$total" ] && [ "$skipped" -eq 0 ]
