@@ -10,10 +10,9 @@
  * id is whatever the wallet is logged in as and the signature is made by a key
  * the app never sees.
  *
- * CIP-0103 leaves provider announcement out of scope, so discovery follows the
- * EIP-6963 pattern that Canton wallets use in practice: the page asks, the
- * extension answers, and the page also listens in case the extension announced
- * itself before this code ran.
+ * CIP-0103 leaves provider announcement out of scope. Discovery follows what
+ * Canton's own dApp SDK does, so any wallet built against it is found, and
+ * keeps the two older shapes a wallet may still use. See discoverProviders.
  */
 
 import { submit as submitAsUser, type Command, type DisclosedContract, type Transaction } from './api'
@@ -69,29 +68,64 @@ export interface ProviderDetail {
   provider: Provider
 }
 
+/** What the dApp SDK's wallets announce: a routing key, not an object to call. */
+interface Announcement {
+  id: string
+  name: string
+  icon?: string
+  target?: string
+}
+
 const found = new Map<string, ProviderDetail>()
+const announced = new Map<string, Announcement>()
 
 function remember(detail: ProviderDetail | undefined) {
   if (detail?.info?.uuid && detail.provider) found.set(detail.info.uuid, detail)
 }
 
+function heard(detail: unknown) {
+  const d = detail as Partial<Announcement & ProviderDetail> | undefined
+  if (d?.info && d.provider) remember(d as ProviderDetail)
+  else if (typeof d?.id === 'string' && typeof d.name === 'string') announced.set(d.id, d as Announcement)
+}
+
 if (typeof window !== 'undefined') {
-  window.addEventListener(ANNOUNCE_EVENT, (e) => remember((e as CustomEvent<ProviderDetail>).detail))
+  window.addEventListener(ANNOUNCE_EVENT, (e) => heard((e as CustomEvent).detail))
 }
 
 /**
- * Finds CIP-0103 wallets two ways, because wallets use both.
+ * Finds CIP-0103 wallets three ways, because wallets use all three.
  *
- * The announcement handshake is the discoverable one and works for any number
- * of wallets. A wallet also injects itself at `window.cantonWallet`, and an
- * extension that loaded before this module would have announced to nobody, so
- * the injected object is checked as well. Whichever answers first wins; the
- * map is keyed so the same wallet found twice is still one entry.
+ * 1. The dApp SDK's announcement, `{ id, name, target }`. There is no object
+ *    to call: the page talks to the extension over `window.postMessage`,
+ *    routed by `target`. The SDK's `ExtensionAdapter` owns that transport and
+ *    its READY/ACK handshake, so an announcement only counts once the
+ *    extension actually answers. Any wallet built on the SDK arrives this way.
+ * 2. An announcement carrying `{ info, provider }`, the EIP-6963 shape, where
+ *    the provider is a callable object.
+ * 3. An object injected at `window.cantonWallet`, checked because an
+ *    extension that loaded before this module announced to nobody.
+ *
+ * The map is keyed, so the same wallet found twice is still one entry.
  */
 export async function discoverProviders(waitMs = 300): Promise<ProviderDetail[]> {
   if (typeof window === 'undefined') return []
-  window.dispatchEvent(new Event(REQUEST_EVENT))
+  window.dispatchEvent(new CustomEvent(REQUEST_EVENT, { detail: {} }))
   await new Promise((r) => setTimeout(r, waitMs))
+
+  // The SDK is loaded only when such a wallet is present: it brings its own
+  // picker and WalletConnect with it, which would more than double the page.
+  const pending = [...announced.values()].filter((a) => !found.has(`browser:ext:${a.id}`))
+  const { ExtensionAdapter } = pending.length ? await import('@canton-network/dapp-sdk') : { ExtensionAdapter: null }
+  await Promise.all(
+    pending.map(async (a) => {
+      const uuid = `browser:ext:${a.id}`
+      const adapter = new ExtensionAdapter!({ providerId: uuid, name: a.name, icon: a.icon, target: a.target ?? a.id })
+      if (await adapter.detect()) {
+        remember({ info: { uuid, name: a.name, icon: a.icon }, provider: adapter.provider() as Provider })
+      }
+    }),
+  )
 
   const injected = (window as { cantonWallet?: Provider }).cantonWallet
   if (injected && typeof injected.request === 'function' && ![...found.values()].some((d) => d.provider === injected)) {
@@ -103,6 +137,9 @@ export async function discoverProviders(waitMs = 300): Promise<ProviderDetail[]>
 function asWalletError(err: unknown): WalletError {
   const e = err as { code?: number; message?: string }
   if (typeof e?.code === 'number') return new WalletError(e.code, e.message ?? 'The wallet refused the request.')
+  // The SDK's HTTP client flattens a JSON-RPC error into this string.
+  const flat = err instanceof Error ? /^RPC error: (-?\d+) - (.*)$/s.exec(err.message) : null
+  if (flat) return new WalletError(Number(flat[1]), flat[2])
   return new WalletError(INTERNAL_ERROR, err instanceof Error ? err.message : 'The wallet did not answer.')
 }
 

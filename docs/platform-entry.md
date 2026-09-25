@@ -53,7 +53,8 @@ record.
 
 ```
 Daml, Canton, Canton JSON Ledger API v2, dpm, Decentralization Manager,
-CIP-0103, React 19, TypeScript, Vite, Node.js, LocalNet
+CIP-0103, @canton-network/dapp-sdk, React 19, TypeScript, Vite, Node.js,
+GitHub Actions, LocalNet
 ```
 
 ## mvpMaterial
