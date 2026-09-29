@@ -4,6 +4,8 @@
 
 ---
 
+**The deck:** [sentry-pitch.pdf](../pitch/sentry-pitch.pdf), 10 slides covering the problem, the solution and how Canton is used, the business brief, GTM and pilot plan, and metrics. This page is the speaker script that goes with it.
+
 ## The 30-second version
 
 Firms are handing AI agents wallet keys. The limits on what those agents can spend live in the software that calls the model, so the thing enforcing the limit is the thing under attack.
@@ -14,7 +16,7 @@ Say this, not "we secure AI agents".
 
 ## Three minutes, in order
 
-The Grand Final is live and the Grofty bounty wants a video of three minutes or less, so the same run order serves both.
+The Grand Final is live, and a recorded walkthrough, if one is made, should follow the same order.
 
 | Time | Beat | What is on screen |
 | --- | --- | --- |
@@ -49,7 +51,7 @@ It lands because the agent is a program holding its own credential, outside the 
 
 **"Why not a public chain?"** It fixes the trust and publishes the caps, the allowlist and the spending cadence of whoever signed the policy. Ask a treasury lead whether that is acceptable. Canton is the only place both hold at once, and the privacy page measures it rather than asserting it.
 
-**"What is not built?"** Said plainly, before being asked: the asset model is self-contained rather than a token standard, the issuer mints on request like a faucet, the participants run in memory, and there are zero user interviews. The Grofty integration runs against a stand-in CIP-0103 provider because Grofty is MainNet-only and invitation-gated.
+**"What is not built?"** Said plainly, before being asked: the asset model is self-contained rather than a token standard, the issuer mints on request like a faucet, the participants run in memory, and there are zero user interviews. No real wallet extension has signed against Sentry yet: the CIP-0103 path is proven with a stand-in that speaks the dApp SDK's protocol, which proves the plumbing and not a key.
 
 Claiming narrowly is the whole voice of this project. A judge who catches one overclaim discounts everything else.
 
@@ -58,7 +60,7 @@ Claiming narrowly is the whole voice of this project. A judge who catches one ov
 Not funding. Three things, in this order:
 
 1. **Ten introductions** to people accountable for an agent that already spends. The GTM material carries four hypotheses and H4 is the one that decides whether this product exists.
-2. **A MainNet validator path**, so the Grofty demo runs end to end rather than against a stand-in.
+2. **A MainNet validator path**, so a real wallet signs end to end rather than a stand-in.
 3. **A token standard to sit on**, which turns the self-contained asset model into a real funding path.
 
 ## Delivery notes

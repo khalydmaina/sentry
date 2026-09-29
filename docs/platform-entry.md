@@ -26,10 +26,9 @@ members, a threshold of two, and confirmations from parties hosted by different
 participants. The threshold lives in BitSafe's `GovernanceRules`, which refuses
 to execute below it, so nothing in our code counts confirmations.
 
-**Grofty Wallet Bounty** (enter only if access arrives). The owner and agent
-connect with Grofty, and signing the policy and approving a held request happen
-with keys the owner holds. Grofty is MainNet-only and invitation-gated, so this
-currently runs against a stand-in CIP-0103 provider.
+Not entered: **Grofty Wallet Bounty.** It requires an end-to-end run on
+Canton MainNet with Grofty, whose access is invitation-only and was never
+held. Withdrawn from the project page on 29 Sep 2026.
 
 ## elevatorPitch
 
@@ -63,6 +62,7 @@ GitHub Actions, LocalNet
 | --- | --- |
 | `githubRepoUrl` | https://github.com/khalydmaina/sentry |
 | `demoUrl` | https://sentry-canton.vercel.app (public since 25 Sep 2026; the desk explains that the ledger runs locally) |
+| pitch deck | https://github.com/khalydmaina/sentry/blob/main/docs/pitch/sentry-pitch.pdf |
 | `demoVideoUrl` | optional, and not required by this hackathon. Leave blank unless a recording exists. |
 
 ## logo
@@ -74,15 +74,16 @@ background reads better on the platform.
 ## contactInfo
 
 - `email`: mainakhalid18@gmail.com
-- `telegram`: **NEEDED**
-- `discord`: **NEEDED**
+- `telegram`: https://t.me/khalyd_m
+- `discord`: optional, blank
 
 ## socials
 
-- `telegram`: **NEEDED**
-- `twitter`: **NEEDED**, or leave blank if there is no project account
+- optional, blank unless there is a project account
 
 ## status
 
-`preview` while drafting, `published` to enter judging. Publishing is gated on
-1000 MANA and 6 of 6 materials uploaded, so this flips last, not first.
+`preview` while drafting, `published` to enter judging. Publishing needs
+1,000 Mana burned toward the project, a completed profile and a non-empty
+journal, so this flips last, not first. The platform's `submissionDate` is
+9 Oct 2026 21:59 UTC, two hours before the 23:59 in the rules, so aim for 8 Oct.
