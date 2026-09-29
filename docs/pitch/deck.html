@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sentry · Pitch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --void: #0A0A0B; --slab: #141416; --paper: #F2F0EB;
+  --signal: #D6FF3F; --escalate: #FFB020; --reject: #FF5A45;
+  --bone: #EDEDEA; --bone-2: #A3A39E; --bone-3: #7D7D77;
+  --rule: #3D3D42; --rule-2: #2A2A2E;
+}
+@page { size: 1280px 720px; margin: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--void); color: var(--bone); }
+body { font-family: Archivo, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.slide {
+  width: 1280px; height: 720px; padding: 56px 72px 48px;
+  position: relative; overflow: hidden; background: var(--void);
+  display: flex; flex-direction: column; break-after: page;
+}
+.slide:last-child { break-after: auto; }
+.label { font-family: 'Martian Mono', monospace; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--bone-2); }
+.label b { color: var(--signal); font-weight: 500; }
+.foot { position: absolute; left: 72px; right: 72px; bottom: 28px; display: flex; justify-content: space-between;
+  font-family: 'Martian Mono', monospace; font-size: 11px; letter-spacing: .06em; color: var(--bone-3); text-transform: uppercase; }
+h1 { font-size: 60px; line-height: 1.04; font-weight: 800; letter-spacing: -.02em; }
+h2 { font-size: 40px; line-height: 1.1; font-weight: 700; letter-spacing: -.015em; margin: 18px 0 28px; max-width: 1080px; }
+h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+p, li { font-size: 19px; line-height: 1.45; color: var(--bone); }
+.dim { color: var(--bone-2); }
+.lime { color: var(--signal); }
+.amber { color: var(--escalate); }
+.red { color: var(--reject); }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.grid { display: grid; gap: 20px; }
+.card { background: var(--slab); border: 1px solid var(--rule-2); padding: 22px 24px; }
+.card p, .card li { font-size: 17px; }
+.term { background: var(--slab); border: 1px solid var(--rule-2); padding: 22px 26px; font-family: 'JetBrains Mono', monospace; font-size: 17px; line-height: 1.7; white-space: pre; color: var(--bone); }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 13px 16px; border-bottom: 1px solid var(--rule-2); font-size: 18px; vertical-align: top; }
+th { font-family: 'Martian Mono', monospace; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--bone-2); font-weight: 500; }
+.yes { color: var(--signal); font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+.no { color: var(--reject); font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+.hl td { background: var(--slab); font-weight: 700; }
+.mark { display: inline-block; }
+.big { font-family: 'JetBrains Mono', monospace; font-size: 44px; font-weight: 700; color: var(--signal); line-height: 1; }
+.stat p { font-size: 15px; color: var(--bone-2); margin-top: 8px; line-height: 1.35; }
+.hatch { background: repeating-linear-gradient(135deg, var(--slab) 0 8px, var(--rule-2) 8px 10px); }
+ul { list-style: none; }
+ul li { padding-left: 22px; position: relative; margin-bottom: 8px; }
+ul li::before { content: ''; position: absolute; left: 0; top: .6em; width: 8px; height: 8px; background: var(--signal); }
+ul.amber li::before { background: var(--escalate); }
+.step { display: flex; gap: 18px; align-items: flex-start; }
+.step .n { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 700; color: var(--void); background: var(--signal); width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; flex: none; margin-top: 2px; }
+.flow { display: flex; gap: 0; margin-top: 8px; }
+.flow div { flex: 1; border: 1px solid var(--rule); border-right: none; padding: 12px 14px; font-family: 'Martian Mono', monospace; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--bone-2); }
+.flow div:last-child { border-right: 1px solid var(--rule); }
+.flow div b { display: block; color: var(--bone); font-family: Archivo, sans-serif; font-size: 16px; text-transform: none; letter-spacing: 0; margin-top: 4px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- 1 · Cover -->
+<section class="slide" style="justify-content: space-between;">
+  <div class="label">HackCanton Season 3 · <b>RWA &amp; Business Workflows</b> · BitSafe Challenge</div>
+  <div>
+    <svg class="mark" width="128" height="96" viewBox="0 0 32 24" fill="none" aria-label="sentry mark"><path d="M0 0H24V9H12V15H24V24H0V0Z" fill="#D6FF3F"/><rect x="26" y="9" width="6" height="6" fill="#D6FF3F"/></svg>
+    <div style="font-family:'Martian Mono',monospace;font-size:22px;letter-spacing:.3em;margin:28px 0 22px;">SENTRY</div>
+    <h1 style="max-width:980px;">The spending limit your AI agent cannot argue with.</h1>
+    <p class="dim" style="font-size:22px;margin-top:22px;max-width:900px;">Spending policies for AI agents, enforced by the Canton ledger and readable by nobody but the owner and the agent.</p>
+  </div>
+  <div class="label" style="text-transform:none;letter-spacing:.02em;font-size:14px;">github.com/khalydmaina/sentry &nbsp;·&nbsp; sentry-canton.vercel.app &nbsp;·&nbsp; Khalid Maina</div>
+</section>
+
+<!-- 2 · Problem -->
+<section class="slide">
+  <div class="label"><b>01</b> · The problem</div>
+  <h2>The spending limit on your AI agent is enforced by the same software you're protecting yourself from.</h2>
+  <p class="dim" style="max-width:1000px;">Teams are putting tool-calling agents in front of real money. The caps live in config and a check before submitting, inside the process the agent runs in. Four ordinary failures all end in the same place:</p>
+  <div class="grid" style="grid-template-columns:repeat(4,1fr);margin:26px 0;">
+    <div class="card"><h3>Prompt injection</h3></div>
+    <div class="card"><h3>A bad tool call</h3></div>
+    <div class="card"><h3>A compromised dependency</h3></div>
+    <div class="card"><h3>An ordinary bug</h3></div>
+  </div>
+  <p style="font-size:22px;">→ a wallet that does what it is told.</p>
+  <div class="grid" style="grid-template-columns:1fr 1fr;margin-top:26px;">
+    <p><span class="red" style="font-weight:700;">On a bad day,</span> the loss is bounded by the balance, not by the policy.</p>
+    <p><span class="amber" style="font-weight:700;">Every other day,</span> the automation nobody switches on, because the only safe setting is a human approving everything.</p>
+  </div>
+  <div class="foot"><span>Sentry</span><span>2 / 10</span></div>
+</section>
+
+<!-- 3 · The gap -->
+<section class="slide">
+  <div class="label"><b>02</b> · Today's answers each solve half</div>
+  <h2>You choose between a limit you can prove and a limit you can keep private.</h2>
+  <table style="margin-top:6px;">
+    <tr><th style="width:44%;"></th><th>Enforced by something the agent cannot reach</th><th>Limits stay private</th></tr>
+    <tr><td>Caps in your own orchestration layer</td><td class="no">no</td><td class="yes">yes</td></tr>
+    <tr><td>Coinbase Spend Permissions <span class="dim">· public chain</span></td><td class="yes">yes</td><td class="no">no</td></tr>
+    <tr><td>canton-agent-mcp <span class="dim">· checked in the wallet app</span></td><td class="no">no</td><td class="yes">yes</td></tr>
+    <tr class="hl"><td class="lime">Sentry</td><td class="yes">yes</td><td class="yes">yes</td></tr>
+  </table>
+  <p class="dim" style="margin-top:30px;max-width:1040px;">A public chain publishes a firm's caps, counterparties and spending cadence. A database or a wallet app enforces the limit but asks everyone to trust whoever runs it. Canton is the one place both properties hold at once.</p>
+  <div class="foot"><span>Sentry</span><span>3 / 10</span></div>
+</section>
+
+<!-- 4 · Solution -->
+<section class="slide">
+  <div class="label"><b>03</b> · The solution</div>
+  <h2>The owner signs a policy. The ledger enforces it.</h2>
+  <div class="grid" style="grid-template-columns:400px 1fr;gap:28px;">
+    <div class="card">
+      <div class="label" style="margin-bottom:14px;">WalletPolicy · signed by the owner</div>
+      <table>
+        <tr><td class="dim" style="font-size:16px;padding:9px 0;">Per-transaction cap</td><td class="mono" style="font-size:16px;padding:9px 0;text-align:right;">200.00</td></tr>
+        <tr><td class="dim" style="font-size:16px;padding:9px 0;">Rolling cap · 24 h</td><td class="mono" style="font-size:16px;padding:9px 0;text-align:right;">300.00</td></tr>
+        <tr><td class="dim" style="font-size:16px;padding:9px 0;">Allowlist</td><td class="mono" style="font-size:16px;padding:9px 0;text-align:right;">merchant</td></tr>
+        <tr><td class="dim" style="font-size:16px;padding:9px 0;border:none;">Auto-approve up to</td><td class="mono" style="font-size:16px;padding:9px 0;text-align:right;border:none;">50.00</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="term" style="font-size:16px;"><span class="lime">EXECUTED</span>   40.00 to Merchant   auto-approved
+<span class="amber">HELD</span>      120.00 to Merchant   above auto-approve, owner signs
+<span class="amber">HELD</span>       10.00 to Stranger   counterparty not allowlisted
+<span class="red">REJECTED</span> 5000.00 to Merchant   insufficient balance</div>
+      <p class="dim" style="margin-top:14px;font-size:15px;">Output of <span class="mono">sentry-agent request</span>, an external program holding the agent's own credential.</p>
+    </div>
+  </div>
+  <p style="margin-top:28px;max-width:1080px;"><span class="mono lime">RequestTransfer</span> is the agent's only choice on the policy. Inside it, payments settle with nobody watching. Outside it, they wait for the owner. Over the balance, they are refused. Every outcome leaves a record.</p>
+  <div class="foot"><span>Sentry</span><span>4 / 10</span></div>
+</section>
+
+<!-- 5 · How Canton is used -->
+<section class="slide">
+  <div class="label"><b>04</b> · How Canton is used</div>
+  <h2 style="margin-bottom:22px;">Canton does the enforcing, the hiding and the sharing.</h2>
+  <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:16px;">
+    <div class="card"><h3>Daml is the enforcement</h3><p class="dim">Caps, allowlist, rolling window and escalation are checked inside <span class="mono">RequestTransfer</span>. No client-side check to patch around.</p></div>
+    <div class="card"><h3>Sub-transaction privacy</h3><p class="dim">The policy is signed by the owner, observed by the agent, and delivered to no counterparty's node.</p></div>
+    <div class="card"><h3>Three participants</h3><p class="dim">One synchronizer, one transaction settling across nodes, each node asked what it holds.</p></div>
+    <div class="card"><h3>Shared control</h3><p class="dim">Releasing or refusing a held request needs 2 of 2 confirmations, through BitSafe's Decentralization Manager.</p></div>
+    <div class="card"><h3>No single host</h3><p class="dim">The owner is hosted on two participants at threshold 1, and kept spending through a host outage.</p></div>
+    <div class="card"><h3>CIP-0103 wallets</h3><p class="dim">Discovered through Canton's dApp SDK. The wallet submits as its own party, no <span class="mono">actAs</span>.</p></div>
+  </div>
+  <div class="flow" style="margin-top:22px;">
+    <div>Issue<b>Bank mints a holding</b></div>
+    <div>Delegate<b>Owner signs the policy</b></div>
+    <div>Request<b>Agent asks to pay</b></div>
+    <div>Decide<b>Settle, hold or refuse</b></div>
+    <div>Record<b>Every outcome on ledger</b></div>
+  </div>
+  <div class="foot"><span>Sentry</span><span>5 / 10</span></div>
+</section>
+
+<!-- 6 · Proof -->
+<section class="slide">
+  <div class="label"><b>05</b> · Don't trust the claim, check the ledger</div>
+  <h2>Delete every check in the agent and nothing changes.</h2>
+  <div class="grid" style="grid-template-columns:1fr 1fr;gap:28px;">
+    <div>
+      <div class="label" style="margin-bottom:10px;">sentry-agent probe</div>
+      <div class="term" style="font-size:14.5px;"><span class="red">REFUSED</span>  move the holding directly
+<span class="red">REFUSED</span>  spend as the owner
+<span class="red">REFUSED</span>  raise its own caps
+<span class="red">REFUSED</span>  mint itself a holding
+<span class="dim">each: DAML_AUTHORIZATION_ERROR</span>
+<span class="lime">4 of 4 refused by the ledger.</span></div>
+      <p class="dim" style="margin-top:12px;font-size:15px;">Four commands the agent is free to send. Balance 960.00 before and after.</p>
+    </div>
+    <div>
+      <div class="label" style="margin-bottom:10px;">Who holds the WalletPolicy</div>
+      <table>
+        <tr><th>Node</th><th>Asked as</th><th>Policy</th></tr>
+        <tr><td class="mono" style="font-size:16px;">sandbox</td><td style="font-size:16px;">owner, agent</td><td class="yes" style="font-size:16px;">held</td></tr>
+        <tr><td class="mono" style="font-size:16px;">sidebox</td><td style="font-size:16px;">owner (2nd host)</td><td class="yes" style="font-size:16px;">held</td></tr>
+        <tr><td class="mono" style="font-size:16px;">pebblebox</td><td style="font-size:16px;">bank, merchant</td><td class="no" style="font-size:16px;">no data</td></tr>
+        <tr class="hl"><td class="mono" style="font-size:16px;">pebblebox</td><td style="font-size:16px;">the owner</td><td class="no" style="font-size:16px;">no data</td></tr>
+      </table>
+      <p class="dim" style="margin-top:12px;font-size:15px;">Asked as the owner's own party, the counterparty node still has no policy. It was never delivered there.</p>
+    </div>
+  </div>
+  <div class="foot"><span>Sentry</span><span>6 / 10</span></div>
+</section>
+
+<!-- 7 · Who it's for -->
+<section class="slide">
+  <div class="label"><b>06</b> · Business brief</div>
+  <h2 style="margin-bottom:20px;">For teams that already let software spend, and can't publish their limits.</h2>
+  <table>
+    <tr><td class="label" style="width:190px;padding-top:15px;">Segment</td><td style="font-size:17px;">Digital-asset treasury and operations teams, 10 to 500 people, already running unattended payment automation. First on Canton: validator operators, tokenized fund administrators, wallet and payments teams.</td></tr>
+    <tr><td class="label" style="padding-top:15px;">User</td><td style="font-size:17px;">The platform engineer who operates the agent, holds its credential and knows their own <span class="mono">if</span> statement is the last line of defence.</td></tr>
+    <tr><td class="label" style="padding-top:15px;">Buyer</td><td style="font-size:17px;">Whoever answers for the money: head of treasury, COO, or the founder.</td></tr>
+    <tr><td class="label" style="padding-top:15px;">Who pays</td><td style="font-size:17px;">For the operational layer: hosted participants, approvals, policy management across agents, reporting. Per agent per month <span class="dim">(hypothesis)</span>. The contracts stay Apache-2.0 and free, because anyone must be able to check them.</td></tr>
+    <tr><td class="label" style="padding-top:15px;">Why Canton</td><td style="font-size:17px;">The only ledger where the limit is enforced by something the agent can't reach and still hidden from everyone but the owner and the agent.</td></tr>
+    <tr><td class="label" style="padding-top:15px;border:none;">Not for</td><td class="dim" style="font-size:17px;border:none;">Retail users, consumer assistants spending API credit, and teams happy with public caps: Spend Permissions already serves them.</td></tr>
+  </table>
+  <div class="foot"><span>Sentry</span><span>7 / 10</span></div>
+</section>
+
+<!-- 8 · GTM and pilot -->
+<section class="slide">
+  <div class="label"><b>07</b> · Go-to-market and pilot plan</div>
+  <h2 style="margin-bottom:22px;">Distribute through wallets, prove it with a refusal.</h2>
+  <div class="grid" style="grid-template-columns:1fr 1.25fr;gap:32px;">
+    <div>
+      <div class="label" style="margin-bottom:12px;">Channels</div>
+      <ul>
+        <li style="font-size:17px;"><b>The probe as the artefact.</b> A refusal an engineer ran is pasted into their team's chat. A dashboard is demoed once.</li>
+        <li style="font-size:17px;"><b>CIP-0103 wallets.</b> Nocturnal and Grofty give users a party and a key but no bounded delegation. We are the missing half, they have the users.</li>
+        <li style="font-size:17px;"><b>Canton ecosystem, directly.</b> Validators and fund administrators are a small, published list: ten conversations.</li>
+        <li style="font-size:17px;"><b>Open contracts.</b> Adoption of the Daml is worth more than signups.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="label" style="margin-bottom:12px;">Pilot · three steps · 90 days</div>
+      <div class="step" style="margin-bottom:16px;"><div class="n">1</div><div><p style="font-size:17px;"><b>A real wallet signs.</b> An owner signs a policy from a CIP-0103 wallet we did not write.</p><p class="dim" style="font-size:14px;">Integration: <span class="mono">@canton-network/dapp-sdk</span>, already wired</p></div></div>
+      <div class="step" style="margin-bottom:16px;"><div class="n">2</div><div><p style="font-size:17px;"><b>A real asset moves.</b> The holding becomes a token-standard asset instead of demo units.</p><p class="dim" style="font-size:14px;">Integration: the Canton token standard</p></div></div>
+      <div class="step"><div class="n">3</div><div><p style="font-size:17px;"><b>A real agent runs for a month.</b> One design partner, one agent, one real cap, on a validator that hosts the owner.</p><p class="dim" style="font-size:14px;">Integration: the partner's participant and their agent's credential. Success is not volume: the held queue caught what it should, and every outcome can be explained from the record.</p></div></div>
+    </div>
+  </div>
+  <div class="foot"><span>Sentry</span><span>8 / 10</span></div>
+</section>
+
+<!-- 9 · Metrics -->
+<section class="slide">
+  <div class="label"><b>08</b> · Metrics and validation</div>
+  <h2 style="margin-bottom:22px;">The mechanism is measured. Adoption isn't yet.</h2>
+  <div class="grid" style="grid-template-columns:repeat(4,1fr);gap:16px;">
+    <div class="card stat"><div class="big">31</div><p>Daml scripts pass: 25 tests, 6 setup</p></div>
+    <div class="card stat"><div class="big">7/7</div><p>deliberate contract bugs caught by the tests</p></div>
+    <div class="card stat"><div class="big">14/14</div><p>claims re-checked on a clean GitHub runner, every push</p></div>
+    <div class="card stat"><div class="big">4/4</div><p>agent bypass attempts refused by the ledger</p></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 1fr;gap:28px;margin-top:24px;">
+    <div>
+      <div class="label" style="margin-bottom:10px;">Also measured, three live participants</div>
+      <ul>
+        <li style="font-size:16px;">Policy absent from the counterparty node</li>
+        <li style="font-size:16px;">Shared control refused at 1 of 2, settled at 2 of 2</li>
+        <li style="font-size:16px;">Owner kept spending with one host offline</li>
+      </ul>
+    </div>
+    <div class="card hatch" style="border-color:var(--rule);">
+      <div class="label" style="margin-bottom:10px;color:var(--escalate);">Not yet validated</div>
+      <p style="font-size:16px;"><b>0 user interviews.</b> Next: ten ICP conversations, recording the second question asked and whether privacy decides it.</p>
+      <p class="dim" style="font-size:14px;margin-top:8px;">North Star: agent requests the ledger decided for an owner who wasn't watching, per week, counted from the owner's own node.</p>
+    </div>
+  </div>
+  <div class="foot"><span>Sentry</span><span>9 / 10</span></div>
+</section>
+
+<!-- 10 · Honest scope and ask -->
+<section class="slide">
+  <div class="label"><b>09</b> · What is not built, and what we ask for</div>
+  <h2 style="margin-bottom:24px;">Claim narrowly. Then ask for the three things that decide it.</h2>
+  <div class="grid" style="grid-template-columns:1fr 1fr;gap:32px;">
+    <div>
+      <div class="label" style="margin-bottom:12px;">Not built yet</div>
+      <ul class="amber">
+        <li style="font-size:17px;">The asset is self-contained, not a token standard</li>
+        <li style="font-size:17px;">The issuer mints on request, like a faucet</li>
+        <li style="font-size:17px;">LocalNet only, participants run in memory</li>
+        <li style="font-size:17px;">No real wallet extension has signed yet</li>
+        <li style="font-size:17px;">One person runs all three nodes, so the operators aren't independent</li>
+      </ul>
+    </div>
+    <div>
+      <div class="label" style="margin-bottom:12px;">The ask · not funding</div>
+      <div class="step" style="margin-bottom:14px;"><div class="n">1</div><p style="font-size:17px;"><b>Ten introductions</b> to people accountable for an agent that already spends.</p></div>
+      <div class="step" style="margin-bottom:14px;"><div class="n">2</div><p style="font-size:17px;"><b>A MainNet validator path</b>, so a real wallet signs end to end.</p></div>
+      <div class="step"><div class="n">3</div><p style="font-size:17px;"><b>A token standard to sit on</b>, so a pilot moves real value.</p></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:28px;">
+    <p class="mono" style="font-size:16px;">github.com/khalydmaina/sentry &nbsp;·&nbsp; run <span class="lime">./scripts/ci.sh</span> and it prints PASS or FAIL per claim</p>
+    <p class="dim" style="font-size:14px;margin-top:6px;">Built during the delivery phase on top of a disclosed pre-hackathon snapshot, <span class="mono">ddbdac9</span>. See the README's Provenance section.</p>
+  </div>
+  <div class="foot"><span>Sentry</span><span>10 / 10</span></div>
+</section>
+
+</body>
+</html>

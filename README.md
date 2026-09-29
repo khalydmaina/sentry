@@ -5,6 +5,7 @@
 Spending limits an AI agent cannot argue with, enforced by Canton's ledger instead of wallet software. The owner signs a `WalletPolicy` delegating limited authority to an agent. `RequestTransfer` is the agent's only way to move funds: in-policy spends execute immediately, anything else becomes a `PendingApproval` for the owner, and insufficient balance is rejected. The policy is visible only to the owner and the agent.
 
 HackCanton Season 3 entry. Live explainer: https://sentry-canton.vercel.app
+Pitch deck: [docs/pitch/sentry-pitch.pdf](docs/pitch/sentry-pitch.pdf) (10 slides; source in `docs/pitch/deck.html`)
 
 ## Test it yourself
 
@@ -128,7 +129,7 @@ owner, asked of pebblebox (does not)   : ['WalletHolding']
 bank,  asked of pebblebox              : ['WalletHolding']
 ```
 
-The owner exists on two independent participants, and the counterparty's node
+The owner exists on two separate participants, and the counterparty's node
 still never receives the policy, even when asked about the owner directly. It
 holds the holding because the bank signed it, and nothing else.
 Reproduce with `python3 scripts/hosting-check.py` against a fresh ledger.
@@ -266,6 +267,30 @@ Shared control · 1 of 2 confirmations   [✓ alice] [confirm as bob] [Release o
 
 The vendored DARs in `governance/vendor/` are built from Decentralization
 Manager at Apache-2.0, with the licence alongside them.
+
+### Nodes, operators and thresholds
+
+| Node | Hosts | Operator on this LocalNet | Operator in a real deployment |
+| --- | --- | --- | --- |
+| `sandbox` | owner, agent, founder, Alice | the author | the owner's firm, or its wallet provider |
+| `sidebox` | owner (second host), Bob | the author | a separate organisation: a custodian, auditor or co-signer running its own validator |
+| `pebblebox` | bank, merchant, stranger, outsider | the author | the counterparties, on their own validators |
+
+Two thresholds are in play:
+
+- **Hosting threshold 1 of 2.** The owner party is hosted on `sandbox` and
+  `sidebox`, and either can confirm for it, so the wallet keeps working when
+  one host goes away (`scripts/outage-demo.py`).
+- **Confirmation threshold 2 of 2.** Releasing or refusing a held request
+  needs Alice, confirming through `sandbox`, and Bob, confirming through
+  `sidebox` (`scripts/governance-demo.py`).
+
+**None of these operators is independent here.** One person runs all three
+nodes on one machine, so this LocalNet shows the mechanism and not the
+independence. What the mechanism gives a real deployment is this: with
+`sandbox` and `sidebox` run by different organisations, neither can release a
+held request alone, and either can go offline without the owner losing access
+to the wallet.
 
 ## The agent, outside the browser
 
