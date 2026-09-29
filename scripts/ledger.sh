@@ -69,6 +69,12 @@ upload_one() { # name, json api, dar
       -H 'Content-Type: application/octet-stream' --data-binary @"$3")
     [ "$status" = 200 ] && return 0
     grep -q CANNOT_AUTODETECT_SYNCHRONIZER "$RUN/upload-$1.out" || { echo "Upload of $(basename "$3") to $1 failed ($status):"; cat "$RUN/upload-$1.out"; exit 1; }
+    # A participant reported connected above can still be dropped afterwards
+    # (seen on CI: sidebox:1, then a minute of no synchronizer), so waiting
+    # alone does not recover it. Reconnect every few failures.
+    if [ $((attempt % 5)) = 0 ]; then
+      echo "  $1 has no synchronizer, reconnecting: $(console "$ROOT/scripts/connect-all.sc" | grep -o 'CONNECTED=.*')"
+    fi
     sleep 2
   done
   echo "Upload of $(basename "$3") to $1 never succeeded"; cat "$RUN/upload-$1.out"; exit 1
